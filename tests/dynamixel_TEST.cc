@@ -6,7 +6,7 @@
 
 class DynamixelTest : public testing::Test {
 protected:
-    dynamixel_bus_t _bus;
+    dynamixel_bus_t _bus{};
     uint8_t _writeBuffer[1024]{0};
     uint8_t _readBuffer[1024]{0};
     size_t _readsize{0};
@@ -14,8 +14,8 @@ protected:
 
     DynamixelTest() {
         _bus = {
-            .readFunc = &mock_read,
             .writeFunc = &mock_write,
+            .readFunc = &mock_read,
             .pvContext = this
         };
     }
