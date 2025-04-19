@@ -31,12 +31,6 @@
 #define STATUS_DATA_LIMIT_ERROR     0x06
 #define STATUS_ACCESS_ERROR         0x07
 
-#define XL430_CT_EEP_OPERATING_MODE    11
-#define XL430_CT_RAM_TORQUE_ENABLE     64
-#define XL430_CT_RAM_LED               65
-#define XL430_CT_RAM_GOAL_POSITION    116
-#define XL430_CT_RAM_PRESENT_POSITION 132
-
 typedef struct __attribute__((__packed__)) {
     uint8_t header[3];
     uint8_t reserved[1];
