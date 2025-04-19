@@ -57,6 +57,7 @@ typedef uint8_t dynamixel_error_t;
 #define DYNAMIXEL_ERROR_CRC_FAIL         0x02
 #define DYNAMIXEL_ERROR_LENGTH_MISMATCH  0x03
 #define DYNAMIXEL_ERROR_INVALID_STATUS_PACKET   0x04
+#define DYNAMIXEL_ERROR_INVALID_PACKET   0x05
 
 #ifdef __cplusplus
 extern "C" {

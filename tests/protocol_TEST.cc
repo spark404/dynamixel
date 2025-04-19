@@ -191,3 +191,21 @@ TEST(ProtocolTests, ParseNoParamSpace) {
 
     ASSERT_EQ(result, DYNAMIXEL_ERROR_BUFFER_TOO_SMALL);
 }
+
+TEST(ProtocolTests, ParseInvalidPacket) {
+    uint8_t status_packet[] = {
+        0xFF, 0x42, 0xFD, 0x00,
+        0x01, 0x07, 0x00, 0x55,
+        0x00, 0x06, 0x04, 0x26,
+        0x42, 0x42
+    };
+
+    dynamixel_status_packet_header_t header;
+    uint8_t param[128];
+    size_t param_length;
+
+    const dynamixel_error_t result = dynamixel_parse_status_packet(status_packet, sizeof(status_packet),
+                                                                   &header, param, sizeof(param), &param_length);
+
+    ASSERT_EQ(result, DYNAMIXEL_ERROR_INVALID_PACKET);
+}

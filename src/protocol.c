@@ -37,6 +37,10 @@ dynamixel_error_t dynamixel_parse_status_packet(const uint8_t *buffer, size_t bu
 
     memcpy(header, buffer, sizeof(dynamixel_status_packet_header_t));
 
+    if (header->header[0] != 0xFF || header->header[1] != 0xFF || header->header[2] != 0xFD) {
+        return DYNAMIXEL_ERROR_INVALID_PACKET;
+    }
+
     if (header->length != buffer_size - sizeof(dynamixel_status_packet_header_t) + 2) {
         return DYNAMIXEL_ERROR_BUFFER_TOO_SMALL;
     }
