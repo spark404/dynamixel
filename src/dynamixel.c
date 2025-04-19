@@ -28,7 +28,7 @@ dynamixel_result_t dynamixel_set_led(dynamixel_servo_t *servo, uint8_t state) {
 		return DNM_NOT_SUPPORTED;
 	}
 
-	return dynamixel_write(servo->id, XL430_CT_RAM_LED, state != 0, servo->bus);
+	return dynamixel_write(servo->id, XL430_CT_RAM_LED, 1, state != 0, servo->bus);
 }
 
 
@@ -41,7 +41,7 @@ dynamixel_result_t dynamixel_set_torque_enable(dynamixel_servo_t *servo, uint8_t
 		return DNM_NOT_SUPPORTED;
 	}
 
-	return dynamixel_write(servo->id, XL430_CT_RAM_TORQUE_ENABLE, state != 0, servo->bus);
+	return dynamixel_write(servo->id, XL430_CT_RAM_TORQUE_ENABLE, 1, state != 0, servo->bus);
 }
 
 dynamixel_result_t dynamixel_get_byte_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint8_t *value) {
@@ -102,4 +102,40 @@ dynamixel_result_t dynamixel_get_long_parameter(dynamixel_servo_t *servo, uint16
 
 	*value = entry_value;
 	return DNM_OK;
+}
+
+dynamixel_result_t dynamixel_set_byte_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint8_t value) {
+	if (servo == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (servo->type != DYNAMIXEL_XL430) {
+		return DNM_NOT_SUPPORTED;
+	}
+
+	return dynamixel_write(servo->id, parameter, 1, value, servo->bus);
+}
+
+dynamixel_result_t dynamixel_set_word_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint16_t value) {
+	if (servo == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (servo->type != DYNAMIXEL_XL430) {
+		return DNM_NOT_SUPPORTED;
+	}
+
+	return dynamixel_write(servo->id, parameter, 2, value, servo->bus);
+}
+
+dynamixel_result_t dynamixel_set_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t value) {
+	if (servo == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (servo->type != DYNAMIXEL_XL430) {
+		return DNM_NOT_SUPPORTED;
+	}
+
+	return dynamixel_write(servo->id, parameter, 4, value, servo->bus);
 }

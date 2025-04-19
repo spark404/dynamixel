@@ -33,91 +33,36 @@ dynamixel_result_t dynamixel_send_ping(uint8_t identifier, dynamixel_bus_t *bus)
 	return dynamixel_status_response(bus, buffer, sizeof(buffer), &packet_length);
 }
 
-dynamixel_result_t dynamixel_write(uint8_t identifier, uint16_t entry, uint8_t value, dynamixel_bus_t *bus) {
+dynamixel_result_t dynamixel_write(uint8_t identifier, uint16_t entry, uint8_t entry_size, uint32_t value, dynamixel_bus_t *bus) {
 	if (bus == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (!(entry_size == 1 || entry_size == 2 || entry_size == 4)) {
 		return DNM_API_ERR;
 	}
 
 	dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
 	header.id = identifier;
 	header.instruction = WRITE;
-	header.length = 6;
-
-	// Write table number
-	uint8_t param[3];
-	param[0] = entry & 0xFF;
-	param[1] = (entry >> 8) & 0xFF;
-	param[2] = value & 0xFF;
-
-	uint8_t buffer[128];
-	size_t packet_length;
-	dynamixel_error_t r = dynamixel_build_packet(header, param, 3, buffer, sizeof(buffer), &packet_length);
-	if (r != DYNAMIXEL_ERROR_NONE) {
-		return DNM_API_ERR;
-	}
-
-	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
-	if (n != packet_length) {
-		return DNM_API_ERR;
-	}
-
-	return dynamixel_status_response(bus, buffer, sizeof(buffer), &packet_length);
-}
-
-dynamixel_result_t dynamixel_write2(uint8_t identifier, uint16_t entry, uint16_t value, dynamixel_bus_t *bus) {
-	if (bus == NULL) {
-		return DNM_API_ERR;
-	}
-
-	dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
-	header.id = identifier;
-	header.instruction = WRITE;
-	header.length = 7;
-
-	// Write table number
-	uint8_t param[4];
-	param[0] = entry & 0xFF;
-	param[1] = (entry >> 8) & 0xFF;
-	param[2] = value & 0xFF;
-	param[3] = (value >> 8) & 0xFF;
-
-	uint8_t buffer[128];
-	size_t packet_length;
-	dynamixel_error_t r = dynamixel_build_packet(header, param, sizeof(param), buffer, sizeof(buffer), &packet_length);
-	if (r != DYNAMIXEL_ERROR_NONE) {
-		return DNM_API_ERR;
-	}
-
-	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
-	if (n != packet_length) {
-		return DNM_API_ERR;
-	}
-
-	return dynamixel_status_response(bus, buffer, sizeof(buffer), &packet_length);
-}
-
-dynamixel_result_t dynamixel_write4(uint8_t identifier, uint16_t entry, uint32_t value, dynamixel_bus_t *bus) {
-	if (bus == NULL) {
-		return DNM_API_ERR;
-	}
-
-	dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
-	header.id = identifier;
-	header.instruction = WRITE;
-	header.length = 9;
+	header.length = 5 + entry_size;
 
 	// Write table number
 	uint8_t param[6];
 	param[0] = entry & 0xFF;
 	param[1] = (entry >> 8) & 0xFF;
 	param[2] = value & 0xFF;
-	param[3] = (value >> 8) & 0xFF;
-	param[4] = (value >> 16) & 0xFF;
-	param[5] = (value >> 24) & 0xFF;
+	if (entry_size >= 2) {
+		param[3] = value >> 8 & 0xFF;
+	}
+	if (entry_size == 4) {
+		param[4] = value >> 16 & 0xFF;
+		param[5] = value >> 24 & 0xFF;
+	}
 
 	uint8_t buffer[128];
 	size_t packet_length;
-	dynamixel_error_t r = dynamixel_build_packet(header, param, sizeof(param), buffer, sizeof(buffer), &packet_length);
+	dynamixel_error_t r = dynamixel_build_packet(header, param, 2 + entry_size, buffer, sizeof(buffer), &packet_length);
 	if (r != DYNAMIXEL_ERROR_NONE) {
 		return DNM_API_ERR;
 	}

@@ -36,6 +36,10 @@ dynamixel_result_t dynamixel_get_byte_parameter(dynamixel_servo_t *servo, uint16
 dynamixel_result_t dynamixel_get_word_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint16_t *value);
 dynamixel_result_t dynamixel_get_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t *value);
 
+dynamixel_result_t dynamixel_set_byte_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint8_t value);
+dynamixel_result_t dynamixel_set_word_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint16_t value);
+dynamixel_result_t dynamixel_set_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t value);
+
 #ifdef __cplusplus
 }
 #endif
