@@ -129,13 +129,47 @@ dynamixel_result_t dynamixel_read(uint8_t identifier, uint16_t entry, uint8_t en
 
 dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *param_buffer, size_t param_buffer_size, size_t *length) {
 	uint8_t rxBuffer[128];
-	ssize_t n = dynamixel_bus_read(bus, rxBuffer, sizeof(rxBuffer));
-	if (n < 0) {
+
+	uint8_t *rxBufferPtr = rxBuffer;
+	size_t read_remaining = 7; // header size with just the length
+	size_t buffer_remaining = sizeof(rxBuffer);
+	while (read_remaining) {
+		ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+		if (n < 0) {
+			return DNM_API_ERR;
+		}
+		read_remaining -= n;
+		rxBufferPtr += n;
+		buffer_remaining -= n;
+
+		if (read_remaining > buffer_remaining) {
+			return DNM_API_ERR;
+		}
+	}
+
+	// Check Magic, include reserved bit to avoid stuffing problems
+	if (!(rxBuffer[0] == 0xFF && rxBuffer[1] == 0xFF && rxBuffer[2] == 0xFD && rxBuffer[3] == 0x00)) {
 		return DNM_API_ERR;
 	}
 
+	read_remaining = rxBuffer[5] & 0xFF | rxBuffer[6] >> 8 & 0xFF;
+	while (read_remaining) {
+		ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+		if (n < 0) {
+			return DNM_API_ERR;
+		}
+		read_remaining -= n;
+		rxBufferPtr += n;
+		buffer_remaining -= n;
+
+		if (read_remaining > buffer_remaining) {
+			return DNM_API_ERR;
+		}
+	}
+
 	dynamixel_status_packet_header_t status_packet_header;
-	dynamixel_result_t result = dynamixel_parse_status_packet(rxBuffer, n, &status_packet_header, param_buffer, param_buffer_size, length);
+	size_t packet_length = (rxBuffer[5] & 0xFF | rxBuffer[6] >> 8 & 0xFF) + 7;
+	dynamixel_result_t result = dynamixel_parse_status_packet(rxBuffer, packet_length, &status_packet_header, param_buffer, param_buffer_size, length);
 	if (result != DNM_OK) {
 		return result;
 	}

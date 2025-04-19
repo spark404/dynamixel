@@ -4,14 +4,15 @@
 #include <dynamixel/dynamixel.h>
 #include <gtest/gtest.h>
 
-class ApiTest : public testing::Test {
+class DynamixelTest : public testing::Test {
 protected:
     dynamixel_bus_t _bus;
     uint8_t _writeBuffer[1024]{0};
     uint8_t _readBuffer[1024]{0};
     size_t _readsize{0};
+    size_t _writesize{0};
 
-    ApiTest() {
+    DynamixelTest() {
         _bus = {
             .readFunc = &mock_read,
             .writeFunc = &mock_write,
@@ -19,7 +20,7 @@ protected:
         };
     }
 
-    ~ApiTest() override {
+    ~DynamixelTest() override {
         _bus = {nullptr, nullptr, nullptr};
     }
 
@@ -30,32 +31,43 @@ protected:
 
     }
 
+    void prepare_response(const uint8_t *txBuffer, const size_t size) {
+        memcpy(_readBuffer, txBuffer, size);
+        _readsize = size;
+    }
+
     ssize_t write(const uint8_t *txBuffer, const size_t size) {
         if (size > sizeof(_writeBuffer)) {
             return  -1;
         }
         memcpy(_writeBuffer, txBuffer, size);
+        _writesize = size;
         return size;
     }
 
     ssize_t read(uint8_t *rxBuffer, const size_t size) {
-        memcpy(rxBuffer, _readBuffer, _readsize);
-        return _readsize;
+        size_t readsize = std::min(_readsize, size);
+        memcpy(rxBuffer, _readBuffer, readsize);
+
+        _readsize -= readsize;
+        memcpy(_readBuffer, _readBuffer + readsize, sizeof(_readBuffer) - readsize);
+
+        return readsize;
     }
 
     static ssize_t mock_write(const uint8_t *txBuffer, const size_t size, void *pvArgument) {
-        auto *self = static_cast<ApiTest *>(pvArgument);
+        auto *self = static_cast<DynamixelTest *>(pvArgument);
         return self->write(txBuffer, size);
     }
 
     static ssize_t mock_read(uint8_t *rxBuffer, const size_t size, void *pvArgument) {
-        auto *self = static_cast<ApiTest *>(pvArgument);
+        auto *self = static_cast<DynamixelTest *>(pvArgument);
         return self->read(rxBuffer, size);
     }
 };
 
 
-TEST_F(ApiTest, ReadByte) {
+TEST_F(DynamixelTest, ReadByte) {
     dynamixel_servo_t servo;
     dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
 
@@ -75,7 +87,7 @@ TEST_F(ApiTest, ReadByte) {
     ASSERT_EQ(present_position, 2);
 }
 
-TEST_F(ApiTest, ReadWord) {
+TEST_F(DynamixelTest, ReadWord) {
     dynamixel_servo_t servo;
     dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
 
@@ -95,7 +107,7 @@ TEST_F(ApiTest, ReadWord) {
     ASSERT_EQ(present_position, 2050);
 }
 
-TEST_F(ApiTest, ReadLong) {
+TEST_F(DynamixelTest, ReadLong) {
     dynamixel_servo_t servo;
     dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
 

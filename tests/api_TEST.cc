@@ -48,8 +48,13 @@ protected:
     }
 
     ssize_t read(uint8_t *rxBuffer, const size_t size) {
-        memcpy(rxBuffer, _readBuffer, _readsize);
-        return _readsize;
+        size_t readsize = std::min(_readsize, size);
+        memcpy(rxBuffer, _readBuffer, readsize);
+
+        _readsize -= readsize;
+        memcpy(_readBuffer, _readBuffer + readsize, sizeof(_readBuffer) - readsize);
+
+        return readsize;
     }
 
     static ssize_t mock_write(const uint8_t *txBuffer, const size_t size, void *pvArgument) {
