@@ -105,3 +105,20 @@ TEST_F(ApiTest, WriteLong) {
     ASSERT_EQ(_writeBuffer[13], 0x11);
 
 }
+
+TEST_F(ApiTest, SyncWriteLong) {
+    uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x11, 0x00, 0x83, 0x74, 0x00, 0x04, 0x00,
+        0x01, 0x96, 0x00, 0x00, 0x00, 0x02, 0xAA, 0x00, 0x00, 0x00, 0x82, 0x87
+    };
+
+    uint8_t identifiers[] = { 0x01, 0x02};
+    uint32_t values[] = { 0x96, 0xAA};
+    dynamixel_result_t result = dynamixel_sync_write(identifiers, 2, 116, 4, values, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+
+    for (int i = 0; i < sizeof(expected_packet); ++i) {
+        EXPECT_EQ(expected_packet[i], _writeBuffer[i]) << "Expected packet differs at index " << i;
+    }
+}

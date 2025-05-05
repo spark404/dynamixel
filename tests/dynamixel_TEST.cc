@@ -126,3 +126,21 @@ TEST_F(DynamixelTest, ReadLong) {
 
     ASSERT_EQ(present_position, 2050);
 }
+
+TEST_F(DynamixelTest, SyncWriteLong) {
+    dynamixel_servo_t servo_1, servo_2;
+    dynamixel_init(&servo_1, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_init(&servo_2, 2, DYNAMIXEL_XL430, &this->_bus);
+
+    uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x11, 0x00, 0x83, 0x74, 0x00, 0x04, 0x00,
+        0x01, 0x96, 0x00, 0x00, 0x00, 0x02, 0xAA, 0x00, 0x00, 0x00, 0x82, 0x87
+    };
+    dynamixel_servo_t servos[] = {servo_1, servo_2};
+    uint32_t values[] = {0x96, 0xAA};
+    dynamixel_result_t result = dynamixel_sync_set_long_parameter(XL430_CT_RAM_GOAL_POSITION, servos, values, 2);
+
+    ASSERT_EQ(result, DNM_OK);
+
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}

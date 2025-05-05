@@ -40,6 +40,8 @@ dynamixel_result_t dynamixel_set_byte_parameter(dynamixel_servo_t *servo, uint16
 dynamixel_result_t dynamixel_set_word_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint16_t value);
 dynamixel_result_t dynamixel_set_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t value);
 
+dynamixel_result_t dynamixel_sync_set_long_parameter(uint16_t parameter, dynamixel_servo_t *servo, uint32_t *values, size_t count);
+
 #ifdef __cplusplus
 }
 #endif

@@ -127,6 +127,51 @@ dynamixel_result_t dynamixel_read(uint8_t identifier, uint16_t entry, uint8_t en
 	return DNM_OK;
 }
 
+dynamixel_result_t dynamixel_sync_write(uint8_t *identifiers, size_t count, uint16_t entry, uint8_t entry_size, uint32_t *value, dynamixel_bus_t *bus) {
+	if (bus == NULL) {
+		return DNM_API_ERR;
+	}
+
+	dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
+	header.id = 0xFE;
+	header.length = 7 + count * (entry_size + 1);
+	header.instruction = SYNC_WRITE;
+
+	if (entry_size != 1 && entry_size != 2 && entry_size != 4) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t param[64];
+	param[0] = entry & 0xFF;
+	param[1] = (entry >> 8) & 0xFF;
+	param[2] = entry_size & 0xFF;
+	param[3] = (entry_size >> 8) & 0xFF;
+
+	for (uint8_t i = 0; i < count; i++) {
+		size_t start_index = (entry_size + 1) * i;
+		param[4 + start_index] = identifiers[i];
+		param[4 + start_index + 1] = value[i] & 0xFF;
+		param[4 + start_index + 2] = value[i] >> 8 & 0xFF;
+		param[4 + start_index + 3] = value[i] >> 16 & 0xFF;
+		param[4 + start_index + 4] = value[i] >> 24 & 0xFF;
+	}
+
+	uint8_t buffer[128];
+	size_t packet_length;
+
+	dynamixel_error_t result = dynamixel_build_packet(header, param, header.length - 3, buffer, sizeof(buffer), &packet_length);
+	if (result != DYNAMIXEL_ERROR_NONE) {
+		return DNM_API_ERR;
+	}
+	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+
+	if (n != packet_length) {
+		return DNM_LL_ERR;
+	}
+
+	return DNM_OK; // This API call does not return a status result
+}
+
 dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *param_buffer, size_t param_buffer_size, size_t *length) {
 	uint8_t rxBuffer[128];
 
