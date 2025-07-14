@@ -33,7 +33,7 @@
 
 typedef struct __attribute__((__packed__)) {
     uint8_t header[3];
-    uint8_t reserved[1];
+    uint8_t reserved;
     uint8_t id;
     uint16_t length;
     uint8_t instruction;
@@ -50,9 +50,10 @@ typedef struct __attribute__((__packed__)) {
 
 #define DYNAMIXEL_PACKET_HEADER_DEFAULT { \
                                             .header = { 0xFF, 0xFF, 0xFD }, \
+                                            .reserved = 0x0, \
                                             .id = 0x0, \
-                                            .instruction = 0x0, \
                                             .length = 0x0, \
+                                            .instruction = 0x0 \
                                         };
 
 typedef uint8_t dynamixel_error_t;
