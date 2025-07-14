@@ -15,12 +15,9 @@ project(
         LANGUAGES C CXX
 )
 
-add_compile_options(-Wall -Wextra -pedantic -Werror)
-
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-
+        add_compile_options(-Wall -Wextra -pedantic -Werror)
         include(CTest)
-
 endif()
 
 add_subdirectory(src)
