@@ -49,7 +49,7 @@ dynamixel_error_t dynamixel_parse_status_packet(const uint8_t *buffer, size_t bu
         return DYNAMIXEL_ERROR_INVALID_STATUS_PACKET;
     }
 
-    if (param_buffer_size <  header->length - 3) {
+    if (param_buffer_size < (size_t)(header->length - 3)) {
         return DYNAMIXEL_ERROR_BUFFER_TOO_SMALL;
     }
 
