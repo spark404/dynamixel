@@ -16,6 +16,7 @@ protected:
         _bus = {
             .writeFunc = &mock_write,
             .readFunc = &mock_read,
+            .flushFunc = nullptr,
             .pvContext = this
         };
     }
