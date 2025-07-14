@@ -23,7 +23,7 @@ protected:
     }
 
     ~ApiTest() override {
-        _bus = {nullptr, nullptr, nullptr};
+        _bus = {nullptr, nullptr, nullptr, nullptr};
     }
 
     void SetUp() override {
@@ -118,7 +118,7 @@ TEST_F(ApiTest, SyncWriteLong) {
 
     ASSERT_EQ(result, DNM_OK);
 
-    for (int i = 0; i < sizeof(expected_packet); ++i) {
+    for (size_t i = 0; i < sizeof(expected_packet); ++i) {
         EXPECT_EQ(expected_packet[i], _writeBuffer[i]) << "Expected packet differs at index " << i;
     }
 }

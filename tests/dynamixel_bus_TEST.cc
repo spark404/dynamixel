@@ -12,6 +12,7 @@ ssize_t mock_write(const uint8_t *txBuffer, const size_t size, void *pvArgument)
 };
 
 ssize_t mock_read(uint8_t *rxBuffer, const size_t size, void *pvArgument) {
+    (void)size;
     auto *data_buffer = static_cast<uint8_t *>(pvArgument);
     memcpy(rxBuffer, data_buffer + 1, data_buffer[0]);
     return static_cast<uint8_t *>(pvArgument)[0];;

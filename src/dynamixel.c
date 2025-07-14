@@ -148,7 +148,7 @@ dynamixel_result_t dynamixel_sync_set_long_parameter(uint16_t parameter, dynamix
 	uint8_t identifiers[count];
 
 	// Must all be on the same bus
-	for (int i=0; i < count; i++) {
+	for (size_t i=0; i < count; i++) {
 		if (servo[0].bus != servo[i].bus) {
 			return DNM_API_ERR;
 		}

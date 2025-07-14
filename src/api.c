@@ -1,9 +1,7 @@
 #include "dynamixel/dynamixel.h"
 #include "dynamixel/protocol.h"
 #include "dynamixel/api.h"
-#include "dynamixel/crc.h"
 
-#include <stddef.h>
 #include <string.h>
 
 dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *param_buffer, size_t param_buffer_size, size_t *length);
@@ -26,7 +24,7 @@ dynamixel_result_t dynamixel_send_ping(uint8_t identifier, dynamixel_bus_t *bus)
 	}
 
 	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
-	if (n != packet_length) {
+	if (n != (ssize_t)packet_length) {
 		return DNM_API_ERR;
 	}
 
@@ -68,7 +66,7 @@ dynamixel_result_t dynamixel_write(uint8_t identifier, uint16_t entry, uint8_t e
 	}
 
 	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
-	if (n != packet_length) {
+	if (n != (ssize_t)packet_length) {
 		return DNM_API_ERR;
 	}
 
@@ -105,7 +103,7 @@ dynamixel_result_t dynamixel_read(uint8_t identifier, uint16_t entry, uint8_t en
 	}
 	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
 
-	if (n != packet_length) {
+	if (n != (ssize_t)packet_length) {
 		return DNM_LL_ERR;
 	}
 
@@ -165,7 +163,7 @@ dynamixel_result_t dynamixel_sync_write(uint8_t *identifiers, size_t count, uint
 	}
 	ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
 
-	if (n != packet_length) {
+	if (n != (ssize_t)packet_length) {
 		return DNM_LL_ERR;
 	}
 
@@ -197,7 +195,7 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 		return DNM_API_ERR;
 	}
 
-	read_remaining = rxBuffer[5] & 0xFF | rxBuffer[6] >> 8 & 0xFF;
+	read_remaining = (rxBuffer[5] & 0xFF) | (rxBuffer[6] >> 8 & 0xFF);
 	while (read_remaining) {
 		ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
 		if (n < 0) {
@@ -213,7 +211,7 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 	}
 
 	dynamixel_status_packet_header_t status_packet_header;
-	size_t packet_length = (rxBuffer[5] & 0xFF | rxBuffer[6] >> 8 & 0xFF) + 7;
+	size_t packet_length = ((rxBuffer[5] & 0xFF) | (rxBuffer[6] >> 8 & 0xFF)) + 7;
 	dynamixel_result_t result = dynamixel_parse_status_packet(rxBuffer, packet_length, &status_packet_header, param_buffer, param_buffer_size, length);
 	if (result != DNM_OK) {
 		return result;

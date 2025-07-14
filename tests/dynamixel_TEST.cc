@@ -21,7 +21,7 @@ protected:
     }
 
     ~DynamixelTest() override {
-        _bus = {nullptr, nullptr, nullptr};
+        _bus = {nullptr, nullptr, nullptr, nullptr};
     }
 
     void SetUp() override {

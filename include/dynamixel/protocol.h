@@ -48,7 +48,12 @@ typedef struct __attribute__((__packed__)) {
     uint8_t error;
 } dynamixel_status_packet_header_t;
 
-#define DYNAMIXEL_PACKET_HEADER_DEFAULT (dynamixel_packet_header_t){{0xFF, 0xFF, 0xFD}, 0x0, 0x0, 0x0, 0x0}
+#define DYNAMIXEL_PACKET_HEADER_DEFAULT { \
+                                            .header = { 0xFF, 0xFF, 0xFD }, \
+                                            .id = 0x0, \
+                                            .instruction = 0x0, \
+                                            .length = 0x0, \
+                                        };
 
 typedef uint8_t dynamixel_error_t;
 
