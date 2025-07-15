@@ -15,6 +15,7 @@ dynamixel_result_t dynamixel_write(uint8_t identifier, uint16_t entry, uint8_t e
 dynamixel_result_t dynamixel_read(uint8_t identifier, uint16_t entry, uint8_t entry_size, uint32_t *value, dynamixel_bus_t *bus);
 
 dynamixel_result_t dynamixel_sync_write(uint8_t *identifiers, size_t count, uint16_t entry, uint8_t entry_size, uint32_t *value, dynamixel_bus_t *bus);
+dynamixel_result_t dynamixel_sync_read(uint8_t *identifiers, size_t count, uint16_t entry, uint8_t entry_size, uint32_t *values, dynamixel_bus_t *bus);
 
 #ifdef __cplusplus
 }

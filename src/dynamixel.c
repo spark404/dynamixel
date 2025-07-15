@@ -140,7 +140,7 @@ dynamixel_result_t dynamixel_set_long_parameter(dynamixel_servo_t *servo, uint16
 	return dynamixel_write(servo->id, parameter, 4, value, servo->bus);
 }
 
-dynamixel_result_t dynamixel_sync_set_long_parameter(uint16_t parameter, dynamixel_servo_t *servo, uint32_t *values, size_t count) {
+dynamixel_result_t dynamixel_sync_set_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t *values, size_t count) {
 	if (servo == NULL) {
 		return DNM_API_ERR;
 	}
@@ -156,4 +156,22 @@ dynamixel_result_t dynamixel_sync_set_long_parameter(uint16_t parameter, dynamix
 	}
 
 	return dynamixel_sync_write(identifiers, count, parameter, 4, values, servo[0].bus);
+}
+
+dynamixel_result_t dynamixel_sync_get_long_parameter(dynamixel_servo_t *servo, uint16_t parameter, uint32_t *values, size_t count) {
+	if (servo == NULL) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[count];
+
+	// Must all be on the same bus
+	for (size_t i=0; i < count; i++) {
+		if (servo[0].bus != servo[i].bus) {
+			return DNM_API_ERR;
+		}
+		identifiers[i] = servo[i].id;
+	}
+
+	return dynamixel_sync_read(identifiers, count, parameter, 4, values, servo[0].bus);
 }

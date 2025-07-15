@@ -139,9 +139,52 @@ TEST_F(DynamixelTest, SyncWriteLong) {
     };
     dynamixel_servo_t servos[] = {servo_1, servo_2};
     uint32_t values[] = {0x96, 0xAA};
-    dynamixel_result_t result = dynamixel_sync_set_long_parameter(XL430_CT_RAM_GOAL_POSITION, servos, values, 2);
+    dynamixel_result_t result = dynamixel_sync_set_long_parameter(servos, XL430_CT_RAM_GOAL_POSITION, values, 2);
 
     ASSERT_EQ(result, DNM_OK);
 
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}
+
+TEST_F(DynamixelTest, SyncReadLong) {
+    dynamixel_servo_t servo_1, servo_2;
+    dynamixel_init(&servo_1, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_init(&servo_2, 2, DYNAMIXEL_XL430, &this->_bus);
+
+    uint8_t expected_read[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0xA6, 0x00, 0x00, 0x00, 0x8C, 0xC0,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x08, 0x00, 0x55, 0x00, 0x1F, 0x08, 0x00, 0x00, 0xBA, 0xBE,
+        };
+    prepare_response(expected_read, sizeof(expected_read));
+
+    uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x09, 0x00, 0x82, 0x84, 0x00, 0x04, 0x00,
+        0x01, 0x02, 0xCE, 0xFA
+    };
+
+    dynamixel_servo_t servos[] = {servo_1, servo_2};
+    uint32_t values[2];
+    dynamixel_result_t result = dynamixel_sync_get_long_parameter(servos, XL430_CT_RAM_PRESENT_POSITION, values, 2);
+
+    ASSERT_EQ(result, DNM_OK);
+
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}
+
+TEST_F(DynamixelTest, Ping) {
+    dynamixel_servo_t servo_1, servo_2;
+    dynamixel_init(&servo_1, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_init(&servo_2, 2, DYNAMIXEL_XL430, &this->_bus);
+
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x55, 0x00, 0x06, 0x04, 0x26, 0x65, 0x5D};
+    memcpy(_readBuffer, expected_read, sizeof(expected_read));
+    _readsize = sizeof(expected_read);
+
+    uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4e
+    };
+
+    dynamixel_result_t result = dynamixel_ping(&servo_1);
+    ASSERT_EQ(result, DNM_OK);
     ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
 }

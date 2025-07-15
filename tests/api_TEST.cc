@@ -123,3 +123,49 @@ TEST_F(ApiTest, SyncWriteLong) {
         EXPECT_EQ(expected_packet[i], _writeBuffer[i]) << "Expected packet differs at index " << i;
     }
 }
+
+TEST_F(ApiTest, SyncReadLong) {
+    uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x09, 0x00, 0x82, 0x84, 0x00, 0x04, 0x00,
+        0x01, 0x02, 0xCE, 0xFA
+    };
+
+    uint8_t expected_read[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0xA6, 0x00, 0x00, 0x00, 0x8C, 0xC0,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x08, 0x00, 0x55, 0x00, 0x1F, 0x08, 0x00, 0x00, 0xBA, 0xBE,
+        };
+    prepare_response(expected_read, sizeof(expected_read));
+
+
+    uint8_t identifiers[] = { 0x01, 0x02};
+    uint32_t values[2];
+    dynamixel_result_t result = dynamixel_sync_read(identifiers, 2, 132, 4, values, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(values[0], 166);
+    ASSERT_EQ(values[1], 2079);
+
+    for (size_t i = 0; i < sizeof(expected_packet); ++i) {
+        EXPECT_EQ(expected_packet[i], _writeBuffer[i]) << "Expected packet differs at index " << i;
+    }
+}
+
+TEST_F(ApiTest, Ping) {
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(_writesize, 10);
+    ASSERT_EQ(_writeBuffer[0], 0xFF);
+    ASSERT_EQ(_writeBuffer[1], 0xFF);
+    ASSERT_EQ(_writeBuffer[2], 0xFD);
+    ASSERT_EQ(_writeBuffer[3], 0x00);
+    ASSERT_EQ(_writeBuffer[4], 0x01);
+    ASSERT_EQ(_writeBuffer[5], 0x03);
+    ASSERT_EQ(_writeBuffer[6], 0x00);
+    ASSERT_EQ(_writeBuffer[7], 0x01);
+    ASSERT_EQ(_writeBuffer[8], 0x19);
+    ASSERT_EQ(_writeBuffer[9], 0x4E);
+}
