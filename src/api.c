@@ -4,6 +4,8 @@
 
 #include <string.h>
 
+#include "../../../../Core/Inc/log.h"
+
 dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *param_buffer, size_t param_buffer_size, size_t *length);
 
 dynamixel_result_t dynamixel_send_ping(uint8_t identifier, dynamixel_bus_t *bus) {
@@ -235,6 +237,11 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 	while (read_remaining) {
 		ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
 		if (n < 0) {
+			LOG_DEBUG("dynamixel_status_response: low level read error in dynamixel_bus_read: %d\r\n", n);
+			return DNM_API_ERR;
+		}
+		if (n==0) {
+			LOG_DEBUG("dynamixel_status_response: dynamixel_bus_read returned 0 bytes read\r\n");
 			return DNM_API_ERR;
 		}
 		read_remaining -= n;
@@ -242,6 +249,7 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 		buffer_remaining -= n;
 
 		if (read_remaining > buffer_remaining) {
+			LOG_DEBUG("dynamixel_status_response: buffer underflow\r\n");
 			return DNM_API_ERR;
 		}
 	}
@@ -255,6 +263,11 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 	while (read_remaining) {
 		ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
 		if (n < 0) {
+			LOG_DEBUG("dynamixel_status_response: low level read error in dynamixel_bus_read: %d\r\n", n);
+			return DNM_API_ERR;
+		}
+		if (n==0) {
+			LOG_DEBUG("dynamixel_status_response: dynamixel_bus_read returned 0 bytes read\r\n");
 			return DNM_API_ERR;
 		}
 		read_remaining -= n;
@@ -262,6 +275,7 @@ dynamixel_result_t dynamixel_status_response(dynamixel_bus_t *bus, uint8_t *para
 		buffer_remaining -= n;
 
 		if (read_remaining > buffer_remaining) {
+			LOG_DEBUG("dynamixel_status_response: buffer underflow\r\n");
 			return DNM_API_ERR;
 		}
 	}
