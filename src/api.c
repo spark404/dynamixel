@@ -139,7 +139,7 @@ dynamixel_result_t dynamixel_sync_write(uint8_t *identifiers, size_t count, uint
 		return DNM_API_ERR;
 	}
 
-	uint8_t param[64];
+	uint8_t param[256];
 	param[0] = entry & 0xFF;
 	param[1] = (entry >> 8) & 0xFF;
 	param[2] = entry_size & 0xFF;
@@ -154,7 +154,7 @@ dynamixel_result_t dynamixel_sync_write(uint8_t *identifiers, size_t count, uint
 		param[4 + start_index + 4] = value[i] >> 24 & 0xFF;
 	}
 
-	uint8_t buffer[128];
+	uint8_t buffer[256];
 	size_t packet_length;
 
 	dynamixel_error_t result = dynamixel_build_packet(header, param, header.length - 3, buffer, sizeof(buffer), &packet_length);
