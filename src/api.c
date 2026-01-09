@@ -25,6 +25,10 @@ dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel
     }
 
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
+
     if (n != (ssize_t) packet_length) {
         return DNM_API_ERR;
     }
@@ -68,6 +72,10 @@ dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entr
     }
 
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
+
     if (n != (ssize_t) packet_length) {
         return DNM_API_ERR;
     }
@@ -106,6 +114,10 @@ dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry
         return result;
     }
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
 
     if (n != (ssize_t) packet_length) {
         return DNM_LL_ERR;
@@ -172,6 +184,9 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
         return DNM_API_ERR;
     }
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
 
     if (n != (ssize_t) packet_length) {
         return DNM_LL_ERR;
@@ -217,6 +232,9 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
         return DNM_API_ERR;
     }
     const ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
 
     if (n != (ssize_t) packet_length) {
         return DNM_LL_ERR;
@@ -251,6 +269,9 @@ dynamixel_result_t dynamixel_status_response(const dynamixel_bus_t *bus, uint8_t
     size_t buffer_remaining = sizeof(rxBuffer);
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+        if (n == 0) {
+            return DNM_LL_TIMEOUT;
+        }
         if (n < 0) {
             return DNM_API_ERR;
         }
@@ -271,6 +292,9 @@ dynamixel_result_t dynamixel_status_response(const dynamixel_bus_t *bus, uint8_t
     read_remaining = (rxBuffer[5] & 0xFF) | (rxBuffer[6] >> 8 & 0xFF);
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+        if (n == 0) {
+            return DNM_LL_TIMEOUT;
+        }
         if (n < 0) {
             return DNM_API_ERR;
         }
