@@ -4,8 +4,9 @@
 
 #include <string.h>
 
-dynamixel_result_t dynamixel_status_response(const dynamixel_bus_t *bus, uint8_t *param_buffer,
-                                             size_t param_buffer_size, size_t *length);
+static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, size_t len);
+static uint8_t dynamixel_parse_status(const uint8_t *buffer, size_t len, uint8_t *status);
+static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, size_t len, uint8_t **parameters, size_t *length);
 
 dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel_bus_t *bus) {
     if (bus == NULL) {
@@ -19,9 +20,8 @@ dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel
 
     uint8_t buffer[128];
     size_t packet_length;
-    dynamixel_result_t r = dynamixel_build_packet(header, NULL, 0, buffer, sizeof(buffer), &packet_length);
-    if (r != DNM_OK) {
-        return r;
+    if (dynamixel_build_packet(header, NULL, 0, buffer, sizeof(buffer), &packet_length) != DYNAMIXEL_ERROR_NONE) {
+        return DNM_API_ERR;
     }
 
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
@@ -30,10 +30,24 @@ dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel
     }
 
     if (n != (ssize_t) packet_length) {
+        return DNM_LL_ERR;
+    }
+
+    n = dynamixel_read_response(bus, buffer, sizeof(buffer));
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
+
+    if (n < 0) {
+        return DNM_LL_ERR;
+    }
+
+    uint8_t status;
+    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
         return DNM_API_ERR;
     }
 
-    return dynamixel_status_response(bus, buffer, sizeof(buffer), &packet_length);
+    return status;
 }
 
 dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entry, const uint8_t entry_size,
@@ -80,7 +94,21 @@ dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entr
         return DNM_API_ERR;
     }
 
-    return dynamixel_status_response(bus, buffer, sizeof(buffer), &packet_length);
+    n = dynamixel_read_response(bus, buffer, sizeof(buffer));
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
+
+    if (n < 0) {
+        return DNM_LL_ERR;
+    }
+
+    uint8_t status;
+    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
+        return DNM_API_ERR;
+    }
+
+    return status;
 }
 
 dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry, const uint8_t entry_size,
@@ -123,19 +151,33 @@ dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry
         return DNM_LL_ERR;
     }
 
-    uint8_t rx_param[32];
-    size_t param_length;
-    result = dynamixel_status_response(bus, rx_param, sizeof(rx_param), &param_length);
+    n = dynamixel_read_response(bus, buffer, sizeof(buffer));
+    if (n == 0) {
+        return DNM_LL_TIMEOUT;
+    }
+
+    if (n < 0) {
+        return DNM_LL_ERR;
+    }
+
+    uint8_t status;
+    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
+        return DNM_API_ERR;
+    }
+
+    uint8_t *parameters = NULL;
+    size_t parameter_length;
+    result = dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length);
     if (result != DNM_OK) {
         return result;
     }
 
-    if (param_length == 1) {
-        *value = rx_param[0];
-    } else if (param_length == 2) {
-        *value = rx_param[0] | rx_param[1] << 8;
+    if (parameter_length == 1) {
+        *value = parameters[0];
+    } else if (parameter_length == 2) {
+        *value = parameters[0] | parameters[1] << 8;
     } else {
-        *value = rx_param[0] | rx_param[1] << 8 | rx_param[2] << 16 | rx_param[3] << 24;
+        *value = parameters[0] | parameters[1] << 8 | parameters[2] << 16 | parameters[3] << 24;
     }
 
     return DNM_OK;
@@ -231,7 +273,7 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
     if (result != DYNAMIXEL_ERROR_NONE) {
         return DNM_API_ERR;
     }
-    const ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
     if (n == 0) {
         return DNM_LL_TIMEOUT;
     }
@@ -240,64 +282,77 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
         return DNM_LL_ERR;
     }
 
-    uint8_t rx_param[32];
-    size_t param_length;
     for (size_t i = 0; i < count; i++) {
-        result = dynamixel_status_response(bus, rx_param, sizeof(rx_param), &param_length);
+        n = dynamixel_read_response(bus, buffer, sizeof(buffer));
+        if (n == 0) {
+            return DNM_LL_TIMEOUT;
+        }
+
+        if (n < 0) {
+            return DNM_LL_ERR;
+        }
+
+        uint8_t status;
+        if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
+            return DNM_API_ERR;
+        }
+
+        uint8_t *parameters = NULL;
+        size_t parameter_length;
+        result = dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length);
         if (result != DNM_OK) {
             return result;
         }
 
-        if (param_length == 1) {
-            values[i] = rx_param[0];
-        } else if (param_length == 2) {
-            values[i] = rx_param[0] | rx_param[1] << 8;
+        if (parameter_length == 1) {
+            values[i] = parameters[0];
+        } else if (parameter_length == 2) {
+            values[i] = parameters[0] | parameters[1] << 8;
         } else {
-            values[i] = rx_param[0] | rx_param[1] << 8 | rx_param[2] << 16 | rx_param[3] << 24;
+            values[i] = parameters[0] | parameters[1] << 8 | parameters[2] << 16 | parameters[3] << 24;
         }
     }
 
     return DNM_OK; // This API call does not return a status result
 }
 
-dynamixel_result_t dynamixel_status_response(const dynamixel_bus_t *bus, uint8_t *param_buffer,
-                                             const size_t param_buffer_size, size_t *length) {
-    uint8_t rxBuffer[128];
+static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, const size_t len) {
+    if (len == 0) {
+        return 0;
+    }
 
-    uint8_t *rxBufferPtr = rxBuffer;
-    size_t read_remaining = 7; // header size with just the length
-    size_t buffer_remaining = sizeof(rxBuffer);
+    // Read the response header first, 7 bytes
+    uint8_t *rxBufferPtr = buffer;
+    size_t read_remaining = 7;
+    size_t buffer_remaining = len;
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
-        if (n == 0) {
-            return DNM_LL_TIMEOUT;
-        }
-        if (n < 0) {
-            return DNM_API_ERR;
+        if (n <= 0) {
+            return n;
         }
         read_remaining -= n;
         rxBufferPtr += n;
         buffer_remaining -= n;
 
         if (read_remaining > buffer_remaining) {
-            return DNM_API_ERR;
+            return -1;
         }
     }
 
     // Check Magic, include reserved bit to avoid stuffing problems
-    if (!(rxBuffer[0] == 0xFF && rxBuffer[1] == 0xFF && rxBuffer[2] == 0xFD && rxBuffer[3] == 0x00)) {
-        return DNM_API_ERR;
+    if (!(buffer[0] == 0xFF && buffer[1] == 0xFF && buffer[2] == 0xFD && buffer[3] == 0x00)) {
+        return -1;
     }
 
-    read_remaining = (rxBuffer[5] & 0xFF) | (rxBuffer[6] >> 8 & 0xFF);
+    // Read the remainder of the packet
+    read_remaining = (buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF);
+    buffer_remaining = len - 7;
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
-        if (n == 0) {
-            return DNM_LL_TIMEOUT;
+        if (n <= 0) {
+            return n;
         }
-        if (n < 0) {
-            return DNM_API_ERR;
-        }
+
         read_remaining -= n;
         rxBufferPtr += n;
         buffer_remaining -= n;
@@ -307,17 +362,30 @@ dynamixel_result_t dynamixel_status_response(const dynamixel_bus_t *bus, uint8_t
         }
     }
 
-    dynamixel_status_packet_header_t status_packet_header;
-    size_t packet_length = ((rxBuffer[5] & 0xFF) | (rxBuffer[6] >> 8 & 0xFF)) + 7;
-    dynamixel_result_t result = dynamixel_parse_status_packet(rxBuffer, packet_length, &status_packet_header,
-                                                              param_buffer, param_buffer_size, length);
-    if (result != DNM_OK) {
-        return result;
+    // return the actual length of the packet
+    return ((buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF)) + 7;
+}
+
+static dynamixel_result_t dynamixel_parse_status(const uint8_t *buffer, const size_t len, uint8_t *status) {
+    if (len < 9) {
+        return DNM_API_ERR;
     }
 
-    if (status_packet_header.error != STATUS_OK) {
-        return status_packet_header.error;
+    if (buffer[7] != 0x55) {
+        // Not a status packet
+        return DNM_API_ERR;
     }
 
+    *status = buffer[8];
+    return DNM_OK;
+}
+
+static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, const size_t len, uint8_t **parameters, size_t *length) {
+    if (len < 9) {
+        return DNM_API_ERR;
+    }
+
+    *parameters = &buffer[9];
+    *length = len - 9 - 2;
     return DNM_OK;
 }

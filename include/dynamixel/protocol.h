@@ -30,6 +30,7 @@
 #define STATUS_DATA_LENGTH_ERROR    0x05
 #define STATUS_DATA_LIMIT_ERROR     0x06
 #define STATUS_ACCESS_ERROR         0x07
+#define STATUS_ALERT_FLAG           0x80
 
 typedef struct __attribute__((__packed__)) {
     uint8_t header[3];
@@ -58,12 +59,12 @@ typedef struct __attribute__((__packed__)) {
 
 typedef uint8_t dynamixel_error_t;
 
-#define DYNAMIXEL_ERROR_NONE             0x00
-#define DYNAMIXEL_ERROR_BUFFER_TOO_SMALL 0x01
-#define DYNAMIXEL_ERROR_CRC_FAIL         0x02
-#define DYNAMIXEL_ERROR_LENGTH_MISMATCH  0x03
-#define DYNAMIXEL_ERROR_INVALID_STATUS_PACKET   0x04
-#define DYNAMIXEL_ERROR_INVALID_PACKET   0x05
+#define DYNAMIXEL_ERROR_NONE                     0x00
+#define DYNAMIXEL_ERROR_BUFFER_TOO_SMALL         0x21
+#define DYNAMIXEL_ERROR_CRC_FAIL                 0x22
+#define DYNAMIXEL_ERROR_LENGTH_MISMATCH          0x23
+#define DYNAMIXEL_ERROR_INVALID_STATUS_PACKET    0x24
+#define DYNAMIXEL_ERROR_INVALID_PACKET           0x25
 
 #ifdef __cplusplus
 extern "C" {
