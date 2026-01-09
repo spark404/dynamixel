@@ -21,12 +21,12 @@ ssize_t mock_read(uint8_t *rxBuffer, const size_t size, void *pvArgument) {
 TEST(DynamixelBus, Init) {
     dynamixel_bus_t mock_bus;
     uint8_t buffer[128];
-    buffer[0] = DNM_OK;
+    buffer[0] = DNM_BUS_OK;
 
-    auto result = dynamixel_bus_init(&mock_bus, mock_read, mock_write, buffer);
+    auto result = dynamixel_bus_init(&mock_bus, mock_read, mock_write, nullptr, buffer);
 
     ASSERT_EQ(mock_bus.pvContext, buffer);
-    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(result, DNM_BUS_OK);
 }
 
 TEST(DynamixelBus, Read) {
@@ -34,7 +34,7 @@ TEST(DynamixelBus, Read) {
     uint8_t buffer[128];
     buffer[0] = 3;
 
-    dynamixel_bus_init(&mock_bus, mock_read, mock_write, buffer);
+    dynamixel_bus_init(&mock_bus, mock_read, mock_write, nullptr, buffer);
 
     buffer[1] = 0x01;
     buffer[2] = 0x02;
@@ -55,7 +55,7 @@ TEST(DynamixelBus, Write) {
     uint8_t buffer[128];
     buffer[0] = 3;
 
-    dynamixel_bus_init(&mock_bus, mock_read, mock_write, buffer);
+    dynamixel_bus_init(&mock_bus, mock_read, mock_write, nullptr, buffer);
 
     uint8_t data[] = { 0x01, 0x02, 0x03};
     auto result = dynamixel_bus_write(&mock_bus, data, sizeof(data));
