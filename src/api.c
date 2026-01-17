@@ -4,8 +4,10 @@
 
 #include <string.h>
 
+#include "dynamixel/crc.h"
+
 static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, size_t len);
-static uint8_t dynamixel_parse_status(const uint8_t *buffer, size_t len, uint8_t *status);
+static uint8_t dynamixel_parse_response(const uint8_t *buffer, size_t len, uint8_t *status);
 static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, size_t len, uint8_t **parameters, size_t *length);
 
 dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel_bus_t *bus) {
@@ -43,8 +45,9 @@ dynamixel_result_t dynamixel_send_ping(const uint8_t identifier, const dynamixel
     }
 
     uint8_t status;
-    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
-        return DNM_API_ERR;
+    dynamixel_result_t result = dynamixel_parse_response(buffer, n, &status);
+    if (result != DNM_OK) {
+        return result;
     }
 
     return status;
@@ -104,8 +107,9 @@ dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entr
     }
 
     uint8_t status;
-    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
-        return DNM_API_ERR;
+    dynamixel_result_t result = dynamixel_parse_response(buffer, n, &status);
+    if (result != DNM_OK) {
+        return result;
     }
 
     return status;
@@ -161,8 +165,13 @@ dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry
     }
 
     uint8_t status;
-    if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
-        return DNM_API_ERR;
+    result = dynamixel_parse_response(buffer, n, &status);
+    if (result != DNM_OK) {
+        return result;
+    }
+
+    if (status != STATUS_OK) {
+        return status;
     }
 
     uint8_t *parameters = NULL;
@@ -170,6 +179,10 @@ dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry
     result = dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length);
     if (result != DNM_OK) {
         return result;
+    }
+
+    if (parameter_length != entry_size) {
+        return DNM_API_ERR;
     }
 
     if (parameter_length == 1) {
@@ -293,7 +306,7 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
         }
 
         uint8_t status;
-        if (dynamixel_parse_status(buffer, n, &status) != DNM_OK) {
+        if (dynamixel_parse_response(buffer, n, &status) != DNM_OK) {
             return DNM_API_ERR;
         }
 
@@ -366,14 +379,24 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
     return ((buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF)) + 7;
 }
 
-static dynamixel_result_t dynamixel_parse_status(const uint8_t *buffer, const size_t len, uint8_t *status) {
+static dynamixel_result_t dynamixel_parse_response(const uint8_t *buffer, const size_t len, uint8_t *status) {
     if (len < 9) {
         return DNM_API_ERR;
     }
 
-    if (buffer[7] != 0x55) {
-        // Not a status packet
+    // Check Magic
+    if (!(buffer[0] == 0xFF && buffer[1] == 0xFF && buffer[2] == 0xFD)) {
         return DNM_API_ERR;
+    }
+
+    uint16_t crc = update_crc(0, buffer, len - 2);
+    if (buffer[len - 2] != (crc & 0xFF) || buffer[len - 1] != ((crc >> 8) & 0xFF)) {
+        return DNM_RECV_CRC_FAIL;
+    };
+
+    // Responses have type status
+    if (buffer[7] != STATUS) {
+        return DNM_RECV_NOT_STATUS;
     }
 
     *status = buffer[8];

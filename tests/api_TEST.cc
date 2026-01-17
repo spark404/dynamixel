@@ -11,8 +11,8 @@ protected:
     dynamixel_bus_t _bus{};
     uint8_t _writeBuffer[1024]{0};
     uint8_t _readBuffer[1024]{0};
-    size_t _readsize{0};
-    size_t _writesize{0};
+    ssize_t _readsize{0};
+    ssize_t _writesize{0};
 
     ApiTest() {
         _bus = {
@@ -34,12 +34,16 @@ protected:
 
     }
 
-    void prepare_response(const uint8_t *txBuffer, const size_t size) {
+    void prepare_response(const uint8_t *txBuffer, const ssize_t size) {
         memcpy(_readBuffer, txBuffer, size);
         _readsize = size;
     }
 
     ssize_t write(const uint8_t *txBuffer, const size_t size) {
+        if (_writesize < 0) {
+            return _writesize;
+        }
+
         if (size > sizeof(_writeBuffer)) {
             return  -1;
         }
@@ -48,8 +52,12 @@ protected:
         return size;
     }
 
-    ssize_t read(uint8_t *rxBuffer, const size_t size) {
-        size_t readsize = std::min(_readsize, size);
+    ssize_t read(uint8_t *rxBuffer, const ssize_t size) {
+        if (_readsize <= 0) {
+            return _readsize;
+        }
+
+        ssize_t readsize = std::min(_readsize, size);
         memcpy(rxBuffer, _readBuffer, readsize);
 
         _readsize -= readsize;
@@ -104,8 +112,123 @@ TEST_F(ApiTest, WriteLong) {
     ASSERT_EQ(_writeBuffer[11], 0x33);
     ASSERT_EQ(_writeBuffer[12], 0x22);
     ASSERT_EQ(_writeBuffer[13], 0x11);
-
 }
+
+TEST_F(ApiTest, WriteInvalidEntrySize) {
+    dynamixel_result_t result = dynamixel_write(0x01, 132, 8, 0x11223344, &_bus);
+
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(ApiTest, WriteBusNull) {
+    dynamixel_result_t result = dynamixel_write(0x01, 132, 4, 0x11223344, nullptr);
+
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(ApiTest, WriteHardwareAlert) {
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x80, 0xA2, 0x8F};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    dynamixel_result_t result = dynamixel_write(0x01, 132, 1, 0x11223344, &_bus);
+
+    ASSERT_EQ(result, STATUS_ALERT_FLAG);
+}
+
+TEST_F(ApiTest, WriteInvalidPacket) {
+    uint8_t expected_read[] = {0xFF, 0x77, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x80, 0xA2, 0x8F};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    dynamixel_result_t result = dynamixel_write(0x01, 132, 1, 0x11223344, &_bus);
+
+    // Returns LL_ERR as the read routine will fail due to being unable to read the packet length
+    // and discards the packet fragment
+    ASSERT_EQ(result, DNM_LL_ERR);
+}
+
+
+TEST_F(ApiTest, ReadByte) {
+    const uint8_t expected_sent[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02,
+        0x84, 0x00, 0x01, 0x00, 0x1D, 0x0B
+    };
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x05, 0x00, 0x55,
+        0x00, 0xA6, 0x87, 0x22
+    };
+    prepare_response(response, sizeof(response));
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(_writesize, 14);
+    ASSERT_EQ(memcmp(_writeBuffer, expected_sent, _writesize), 0);
+
+    ASSERT_EQ(value, 166);
+}
+
+TEST_F(ApiTest, ReadWord) {
+    const uint8_t expected_sent[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02,
+        0x84, 0x00, 0x02, 0x00, 0x1D, 0x01
+    };
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x55,
+        0x00, 0xA6, 0x02, 0xC3, 0x8F
+    };
+    prepare_response(response, sizeof(response));
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 2, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(_writesize, 14);
+    ASSERT_EQ(memcmp(_writeBuffer, expected_sent, _writesize), 0);
+
+    ASSERT_EQ(value, 678);
+}
+
+TEST_F(ApiTest, ReadLong) {
+    const uint8_t expected_sent[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x02,
+        0x84, 0x00, 0x04, 0x00, 0x1D, 0x15
+    };
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55,
+        0x00, 0xA6, 0x00, 0x00, 0x00, 0x8C, 0xC0
+    };
+    prepare_response(response, sizeof(response));
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 4, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(_writesize, 14);
+    ASSERT_EQ(memcmp(_writeBuffer, expected_sent, _writesize), 0);
+
+    ASSERT_EQ(value, 166);
+}
+
+TEST_F(ApiTest, ReadHardwareAlert) {
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x80, 0xA2, 0x8F};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, &_bus);
+
+    ASSERT_EQ(result, STATUS_ALERT_FLAG);
+}
+
+TEST_F(ApiTest, ReadBusNull) {
+    uint32_t value;
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, nullptr);
+
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+
 
 TEST_F(ApiTest, SyncWriteLong) {
     uint8_t expected_packet[] = {
@@ -168,4 +291,46 @@ TEST_F(ApiTest, Ping) {
     ASSERT_EQ(_writeBuffer[7], 0x01);
     ASSERT_EQ(_writeBuffer[8], 0x19);
     ASSERT_EQ(_writeBuffer[9], 0x4E);
+}
+
+TEST_F(ApiTest, ResponseHardwareAlert) {
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x80, 0xA2, 0x8F};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, STATUS_ALERT_FLAG);
+}
+
+TEST_F(ApiTest, ResponseCrcFail) {
+    uint8_t expected_read[] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x80, 0x12, 0x34};
+    prepare_response(expected_read, sizeof(expected_read));
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, DNM_RECV_CRC_FAIL);
+}
+
+TEST_F(ApiTest, BusReadTimeout) {
+    _readsize = 0; // bus read returning 0 indicates timeout
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, DNM_LL_TIMEOUT);
+}
+
+TEST_F(ApiTest, BusReadError) {
+    _readsize = -1; // bus read returning <0 indicates error
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, DNM_LL_ERR);
+}
+
+TEST_F(ApiTest, BusWriteError) {
+    _writesize = -1; // bus write returning <0 indicates timeout
+
+    dynamixel_result_t result = dynamixel_send_ping(0x01, &_bus);
+
+    ASSERT_EQ(result, DNM_LL_ERR);
 }

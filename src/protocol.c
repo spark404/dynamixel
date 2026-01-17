@@ -29,38 +29,3 @@ dynamixel_error_t dynamixel_build_packet(dynamixel_packet_header_t header, uint8
 
     return DYNAMIXEL_ERROR_NONE;
 }
-
-dynamixel_error_t dynamixel_parse_status_packet(const uint8_t *buffer, size_t buffer_size, dynamixel_status_packet_header_t *header, uint8_t *param_buffer, size_t param_buffer_size, size_t *param_length) {
-    if (buffer_size < sizeof(dynamixel_status_packet_header_t)) {
-        return DYNAMIXEL_ERROR_BUFFER_TOO_SMALL;
-    }
-
-    memcpy(header, buffer, sizeof(dynamixel_status_packet_header_t));
-
-    if (header->header[0] != 0xFF || header->header[1] != 0xFF || header->header[2] != 0xFD) {
-        return DYNAMIXEL_ERROR_INVALID_PACKET;
-    }
-
-    if (header->length != buffer_size - sizeof(dynamixel_status_packet_header_t) + 2) {
-        return DYNAMIXEL_ERROR_BUFFER_TOO_SMALL;
-    }
-
-    if (header->instruction != STATUS) {
-        return DYNAMIXEL_ERROR_INVALID_STATUS_PACKET;
-    }
-
-    if (param_buffer_size < (size_t)(header->length - 3)) {
-        return DYNAMIXEL_ERROR_BUFFER_TOO_SMALL;
-    }
-
-    memcpy(param_buffer, buffer+sizeof(dynamixel_status_packet_header_t), header->length - 3);
-    *param_length = header->length - 4;
-
-    uint16_t crc = update_crc(0, buffer, buffer_size - 2);
-    if (buffer[buffer_size - 2] != (crc & 0xFF) || buffer[buffer_size - 1] != ((crc >> 8) & 0xFF)) {
-        return DYNAMIXEL_ERROR_CRC_FAIL;
-    };
-
-    return DYNAMIXEL_ERROR_NONE;
-}
-

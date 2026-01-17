@@ -41,14 +41,7 @@ target_link_libraries(
 
 include(GoogleTest)
 
-gtest_discover_tests(
-        api_test
-        protocol_test
-        dynamixel_bus_test
-        dynamixel_test
-)
-
-add_test(NAME api_test COMMAND api_test)
-add_test(NAME protocol_test COMMAND protocol_test)
-add_test(NAME dynamixel_bus_test COMMAND dynamixel_bus_test)
-add_test(NAME dynamixel_test COMMAND dynamixel_test)
+gtest_discover_tests(api_test)
+gtest_discover_tests(protocol_test)
+gtest_discover_tests(dynamixel_bus_test)
+gtest_discover_tests(dynamixel_test)

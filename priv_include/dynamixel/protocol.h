@@ -71,7 +71,6 @@ extern "C" {
 #endif
 
 dynamixel_error_t dynamixel_build_packet(dynamixel_packet_header_t header, uint8_t *param, size_t param_length, uint8_t *buffer, size_t buffer_length, size_t *length);
-dynamixel_error_t dynamixel_parse_status_packet(const uint8_t *buffer, size_t buffer_size, dynamixel_status_packet_header_t *header, uint8_t *param_buffer, size_t param_buffer_size, size_t *param_length);
 
 #ifdef __cplusplus
 }
