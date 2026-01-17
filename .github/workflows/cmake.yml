@@ -32,8 +32,8 @@ jobs:
       with:
         report_paths: ${{github.workspace}}/build/junit.xml
 
-    - name: Code Coverage Summary Report
-      uses: irongut/CodeCoverageSummary@v1.3.0
+    - name: Check Test Coverage
+      uses: threeal/gcovr-action@v1.2.0
       with:
-        filename: coverage.cobertura.xml
-
+        fail-under-line: 80
+        html-out: coverage.html
