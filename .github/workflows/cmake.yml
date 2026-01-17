@@ -27,11 +27,8 @@ jobs:
       run: ctest -T Test -T Coverage -C ${{env.BUILD_TYPE}} --output-junit junit.xml
 
     - name: Check Test Coverage
-      uses: threeal/gcovr-action@v1.2.0
-      with:
-        fail-under-line: 78
-        print-summary: true
-        txt-out: coverage.txt
+      if: success() || failure() # always run even if the previous step fails
+      run: gcovr --fail-under-line 78 --markdown coverage.md
 
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@v5
@@ -42,5 +39,4 @@ jobs:
     - name: Publish Coverage Report
       if: success() || failure() # always run even if the previous step fails
       run: |
-        cat coverage.txt | awk '{print "- " $1}' > coverage.md
         cat coverage.md >> $GITHUB_STEP_SUMMARY
