@@ -67,6 +67,35 @@ protected:
     }
 };
 
+TEST_F(DynamixelTest, ValidateServoNull) {
+    dynamixel_result_t result = dynamixel_ping(NULL);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, ValidateServoBusNull) {
+    dynamixel_servo_t servo = {
+        1,
+        DYNAMIXEL_XL430,
+        true,
+        nullptr
+    };
+
+    dynamixel_result_t result = dynamixel_ping(&servo);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, ValidateServoNotSupported) {
+    dynamixel_bus_t bus = {};
+    dynamixel_servo_t servo = {
+        1,
+        2,
+        true,
+        &bus
+    };
+
+    dynamixel_result_t result = dynamixel_ping(&servo);
+    ASSERT_EQ(result, DNM_NOT_SUPPORTED);
+}
 
 TEST_F(DynamixelTest, ReadByte) {
     dynamixel_servo_t servo;
@@ -139,7 +168,7 @@ TEST_F(DynamixelTest, SyncWriteLong) {
     };
     dynamixel_servo_t servos[] = {servo_1, servo_2};
     uint32_t values[] = {0x96, 0xAA};
-    dynamixel_result_t result = dynamixel_sync_set_long_parameter(servos, XL430_CT_RAM_GOAL_POSITION, values, 2);
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(servos, 2, XL430_CT_RAM_GOAL_POSITION, values);
 
     ASSERT_EQ(result, DNM_OK);
 
@@ -164,7 +193,7 @@ TEST_F(DynamixelTest, SyncReadLong) {
 
     dynamixel_servo_t servos[] = {servo_1, servo_2};
     uint32_t values[2];
-    dynamixel_result_t result = dynamixel_sync_get_long_parameter(servos, XL430_CT_RAM_PRESENT_POSITION, values, 2);
+    dynamixel_result_t result = dynamixel_get_long_parameter_multiple(servos, 2, XL430_CT_RAM_PRESENT_POSITION, values);
 
     ASSERT_EQ(result, DNM_OK);
 
@@ -189,7 +218,7 @@ TEST_F(DynamixelTest, SyncReadLongWithError) {
 
     dynamixel_servo_t servos[] = {servo_1, servo_2};
     uint32_t values[2];
-    dynamixel_result_t result = dynamixel_sync_get_long_parameter(servos, XL430_CT_RAM_PRESENT_POSITION, values, 2);
+    dynamixel_result_t result = dynamixel_get_long_parameter_multiple(servos, 2, XL430_CT_RAM_PRESENT_POSITION, values);
 
     ASSERT_EQ(result, DNM_OK);
 

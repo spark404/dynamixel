@@ -5,7 +5,7 @@
 #include "dynamixel/protocol.h"
 
 #include <string.h>
-#include "dynamixel/crc.h"
+#include "../priv_include/dynamixel/crc.h"
 
 dynamixel_error_t dynamixel_build_packet(dynamixel_packet_header_t header, uint8_t *param, size_t param_length, uint8_t *buffer, size_t buffer_length, size_t *length) {
     if (buffer_length < sizeof(dynamixel_packet_header_t) + param_length + 2) {

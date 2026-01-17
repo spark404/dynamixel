@@ -1,6 +1,6 @@
 #include "dynamixel/dynamixel.h"
 #include "dynamixel/protocol.h"
-#include "dynamixel/api.h"
+#include "../priv_include/dynamixel/api.h"
 
 #include <string.h>
 

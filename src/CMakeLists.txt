@@ -16,8 +16,12 @@ add_library(dynamixel
 )
 
 target_include_directories(dynamixel 
-        PUBLIC ../include
+        PUBLIC ../include ../priv_include
 )
+
+# Enable coverage for Debug builds
+target_compile_options(dynamixel PRIVATE "$<$<CONFIG:DEBUG>:--coverage>")
+target_link_options(dynamixel PRIVATE "$<$<CONFIG:DEBUG>:--coverage>")
 
 source_group(
   TREE "${PROJECT_SOURCE_DIR}/include"

@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include "dynamixel/protocol.h"
+#include "../priv_include/dynamixel/protocol.h"
 
 TEST(ProtocolTests, HeaderDefaults) {
     uint8_t expected[] = {0xFF, 0xFF, 0xFD, 0x00, 0x00, 0x00, 0x00, 0x00};

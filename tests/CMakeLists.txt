@@ -5,6 +5,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googletest)
 
+add_link_options("$<$<CONFIG:DEBUG>:--coverage>")
 
 add_executable(api_test api_TEST.cc)
 add_dependencies(api_test dynamixel)
@@ -51,6 +52,3 @@ add_test(NAME api_test COMMAND api_test)
 add_test(NAME protocol_test COMMAND protocol_test)
 add_test(NAME dynamixel_bus_test COMMAND dynamixel_bus_test)
 add_test(NAME dynamixel_test COMMAND dynamixel_test)
-
-add_compile_options("$<$<CONFIG:DEBUG>:--coverage>")
-add_link_options("$<$<CONFIG:DEBUG>:--coverage>")

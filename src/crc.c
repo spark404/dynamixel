@@ -1,4 +1,4 @@
-#include "dynamixel/crc.h"
+#include "../priv_include/dynamixel/crc.h"
 
 uint16_t update_crc(uint16_t crc_accum, const uint8_t *data_blk_ptr, const uint16_t data_blk_size)
 {

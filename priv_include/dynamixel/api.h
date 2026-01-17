@@ -2,8 +2,8 @@
 #define DYNAMIXEL_API_H
 
 #include <stdint.h>
-#include "dynamixel.h"
-#include "protocol.h"
+#include "dynamixel/dynamixel.h"
+#include "dynamixel/protocol.h"
 
 #ifdef __cplusplus
 extern "C" {
