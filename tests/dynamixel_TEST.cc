@@ -234,11 +234,74 @@ TEST_F(DynamixelTest, Ping) {
     memcpy(_readBuffer, expected_read, sizeof(expected_read));
     _readsize = sizeof(expected_read);
 
-    uint8_t expected_packet[] = {
+    const uint8_t expected_packet[] = {
         0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x03, 0x00, 0x01, 0x19, 0x4e
     };
 
     dynamixel_result_t result = dynamixel_ping(&servo_1);
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}
+
+TEST_F(DynamixelTest, WriteByte) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+
+    const uint8_t prepared_response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C
+    };
+    memcpy(_readBuffer, prepared_response, sizeof(prepared_response));
+    _readsize = sizeof(prepared_response);
+
+    const uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x03,
+        0x14, 0x00, 0x0A, 0xF1, 0x62
+    };
+
+    dynamixel_result_t result = dynamixel_set_byte_parameter(&servo, XL430_CT_EEP_HOMING_OFFSET, 10);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}
+
+TEST_F(DynamixelTest, WriteWord) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+
+    const uint8_t prepared_response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C
+    };
+    memcpy(_readBuffer, prepared_response, sizeof(prepared_response));
+    _readsize = sizeof(prepared_response);
+
+    const uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x07, 0x00, 0x03,
+        0x14, 0x00, 0x0A, 0x00, 0x5C, 0xF1
+    };
+
+    dynamixel_result_t result = dynamixel_set_word_parameter(&servo, XL430_CT_EEP_HOMING_OFFSET, 10);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
+}
+
+TEST_F(DynamixelTest, WriteLong) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+
+    const uint8_t prepared_response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C
+    };
+    memcpy(_readBuffer, prepared_response, sizeof(prepared_response));
+    _readsize = sizeof(prepared_response);
+
+    const uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x09, 0x00, 0x03,
+        0x14, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x87, 0x81
+    };
+
+    dynamixel_result_t result = dynamixel_set_long_parameter(&servo, XL430_CT_EEP_HOMING_OFFSET, 10);
+
     ASSERT_EQ(result, DNM_OK);
     ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
 }

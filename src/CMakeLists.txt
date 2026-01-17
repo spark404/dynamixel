@@ -20,8 +20,8 @@ target_include_directories(dynamixel
 )
 
 # Enable coverage for Debug builds
-target_compile_options(dynamixel PRIVATE "$<$<CONFIG:DEBUG>:--coverage>")
-target_link_options(dynamixel PRIVATE "$<$<CONFIG:DEBUG>:--coverage>")
+target_compile_options(dynamixel PRIVATE "$<$<CONFIG:COVERAGE>:--coverage>")
+target_link_options(dynamixel PRIVATE "$<$<CONFIG:COVERAGE>:--coverage>")
 
 source_group(
   TREE "${PROJECT_SOURCE_DIR}/include"

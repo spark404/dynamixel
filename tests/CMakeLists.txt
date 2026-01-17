@@ -5,7 +5,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googletest)
 
-add_link_options("$<$<CONFIG:DEBUG>:--coverage>")
+add_link_options("$<$<CONFIG:COVERAGE>:--coverage>")
 
 add_executable(api_test api_TEST.cc)
 add_dependencies(api_test dynamixel)
