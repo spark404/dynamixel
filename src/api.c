@@ -6,7 +6,7 @@
 
 #include "dynamixel/crc.h"
 
-static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, size_t len);
+static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, size_t buffer_size);
 static uint8_t dynamixel_parse_response(const uint8_t *buffer, size_t len, uint8_t *status);
 static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, size_t len, uint8_t **parameters, size_t *length);
 
@@ -264,7 +264,7 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
         return DNM_API_ERR;
     }
 
-    uint8_t param[64];
+    uint8_t param[128];
     if (entry_size * count + 4 > sizeof(param)) {
         return DNM_API_ERR;
     }
@@ -306,8 +306,13 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
         }
 
         uint8_t status;
-        if (dynamixel_parse_response(buffer, n, &status) != DNM_OK) {
-            return DNM_API_ERR;
+        result = dynamixel_parse_response(buffer, n, &status);
+        if (result != DNM_OK) {
+            return result;
+        }
+
+        if (status != STATUS_OK) {
+            return status;
         }
 
         uint8_t *parameters = NULL;
@@ -371,7 +376,7 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         buffer_remaining -= n;
 
         if (read_remaining > buffer_remaining) {
-            return DNM_API_ERR;
+            return -1;
         }
     }
 
