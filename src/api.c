@@ -94,7 +94,7 @@ dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entr
     }
 
     if (n != (ssize_t) packet_length) {
-        return DNM_API_ERR;
+        return DNM_LL_ERR;
     }
 
     n = dynamixel_read_response(bus, buffer, sizeof(buffer));
@@ -224,10 +224,9 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
     for (size_t i = 0; i < count; i++) {
         const size_t start_index = (entry_size + 1) * i;
         param[4 + start_index] = identifiers[i];
-        param[4 + start_index + 1] = value[i] & 0xFF;
-        param[4 + start_index + 2] = value[i] >> 8 & 0xFF;
-        param[4 + start_index + 3] = value[i] >> 16 & 0xFF;
-        param[4 + start_index + 4] = value[i] >> 24 & 0xFF;
+        for (uint8_t b = 0; b < entry_size; b++) {
+            param[4 + start_index + 1 + b] = (value[i] >> (8 * b)) & 0xFF;
+        }
     }
 
     uint8_t buffer[256];
@@ -343,18 +342,21 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
     uint8_t *rxBufferPtr = buffer;
     size_t read_remaining = 7;
     size_t buffer_remaining = len;
+    if (buffer_remaining < read_remaining) {
+        return -1;
+    }
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
         if (n <= 0) {
             return n;
         }
+        if ((size_t) n > read_remaining) {
+            // Bus driver returned more bytes than requested - protocol violation.
+            return -1;
+        }
         read_remaining -= n;
         rxBufferPtr += n;
         buffer_remaining -= n;
-
-        if (read_remaining > buffer_remaining) {
-            return -1;
-        }
     }
 
     // Check Magic, include reserved bit to avoid stuffing problems
@@ -363,25 +365,29 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
     }
 
     // Read the remainder of the packet
-    read_remaining = (buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF);
+    const size_t payload_length = (size_t) buffer[5] | ((size_t) buffer[6] << 8);
     buffer_remaining = len - 7;
+    if (payload_length > buffer_remaining) {
+        return -1;
+    }
+    read_remaining = payload_length;
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
         if (n <= 0) {
             return n;
         }
+        if ((size_t) n > read_remaining) {
+            // Bus driver returned more bytes than requested - protocol violation.
+            return -1;
+        }
 
         read_remaining -= n;
         rxBufferPtr += n;
         buffer_remaining -= n;
-
-        if (read_remaining > buffer_remaining) {
-            return -1;
-        }
     }
 
     // return the actual length of the packet
-    return ((buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF)) + 7;
+    return (ssize_t) (payload_length + 7);
 }
 
 static dynamixel_result_t dynamixel_parse_response(const uint8_t *buffer, const size_t len, uint8_t *status) {

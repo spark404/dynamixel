@@ -4,10 +4,20 @@
 
 #include "../priv_include/dynamixel/api.h"
 
+#define DYNAMIXEL_MAX_SERVO_LIST 64
+
 static dynamixel_result_t validate_servo(const dynamixel_servo_t *servo);
 
 dynamixel_result_t dynamixel_init(dynamixel_servo_t *servo, uint8_t id, uint8_t type, dynamixel_bus_t *bus)
 {
+	if (servo == NULL || bus == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (type != DYNAMIXEL_XL430) {
+		return DNM_NOT_SUPPORTED;
+	}
+
 	servo->id = id;
 	servo->type = type;
 	servo->initialized = 1;
@@ -124,11 +134,15 @@ dynamixel_result_t dynamixel_set_long_parameter(const dynamixel_servo_t *servo, 
 }
 
 dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint32_t *values) {
-	if (servo_list == NULL) {
+	if (servo_list == NULL || values == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	if (servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVO_LIST) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	memset(identifiers, 0, sizeof(identifiers));
 
 	// Verify all servos are on the same bus
@@ -151,11 +165,15 @@ dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t
 }
 
 dynamixel_result_t dynamixel_get_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, uint32_t *values) {
-	if (servo_list == NULL) {
+	if (servo_list == NULL || values == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	if (servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVO_LIST) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	memset(identifiers, 0, sizeof(identifiers));
 
 
