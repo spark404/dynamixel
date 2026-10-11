@@ -4,10 +4,20 @@
 
 #include "../priv_include/dynamixel/api.h"
 
+#define DYNAMIXEL_MAX_SERVO_LIST 64
+
 static dynamixel_result_t validate_servo(const dynamixel_servo_t *servo);
 
 dynamixel_result_t dynamixel_init(dynamixel_servo_t *servo, uint8_t id, uint8_t type, dynamixel_bus_t *bus)
 {
+	if (servo == NULL || bus == NULL) {
+		return DNM_API_ERR;
+	}
+
+	if (type != DYNAMIXEL_XL430) {
+		return DNM_NOT_SUPPORTED;
+	}
+
 	servo->id = id;
 	servo->type = type;
 	servo->initialized = 1;
@@ -123,19 +133,21 @@ dynamixel_result_t dynamixel_set_long_parameter(const dynamixel_servo_t *servo, 
 	return dynamixel_write(servo->id, parameter, 4, value, servo->bus);
 }
 
-/* No bus can have more servos than there are identifiers (0..252) */
-#define DYNAMIXEL_MAX_SERVOS 253
-
 /**
  * Check a servo list for a Sync Read or Write and copy its identifiers: the
- * list must not be empty, all servos must be on the same bus and be supported.
+ * list must not be empty or longer than DYNAMIXEL_MAX_SERVO_LIST, all servos
+ * must be on the same bus and be supported. identifiers must hold
+ * DYNAMIXEL_MAX_SERVO_LIST entries.
  */
 static dynamixel_result_t collect_identifiers(const dynamixel_servo_t *servo_list, const size_t servo_list_size,
                                               uint8_t *identifiers) {
-	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVO_LIST) {
 		return DNM_API_ERR;
 	}
 
+	// Verify all servos are on the same bus
+	// Verify all servos are correctly configured
+	// Convert the servos to a list of identifiers
 	for (size_t i = 0; i < servo_list_size; i++) {
 		if (servo_list[0].bus != servo_list[i].bus) {
 			return DNM_API_ERR;
@@ -153,11 +165,11 @@ static dynamixel_result_t collect_identifiers(const dynamixel_servo_t *servo_lis
 }
 
 dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint32_t *values) {
-	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+	if (servo_list == NULL || values == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
 	if (res != DNM_OK) {
 		return res;
@@ -167,11 +179,11 @@ dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t
 }
 
 dynamixel_result_t dynamixel_get_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, uint32_t *values) {
-	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+	if (servo_list == NULL || values == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
 	if (res != DNM_OK) {
 		return res;
@@ -181,11 +193,11 @@ dynamixel_result_t dynamixel_get_long_parameter_multiple(const dynamixel_servo_t
 }
 
 dynamixel_result_t dynamixel_set_bytes_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint16_t length, const uint8_t *data) {
-	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+	if (servo_list == NULL || data == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
 	if (res != DNM_OK) {
 		return res;
@@ -195,14 +207,15 @@ dynamixel_result_t dynamixel_set_bytes_multiple(const dynamixel_servo_t *servo_l
 }
 
 dynamixel_result_t dynamixel_get_bytes_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint16_t length, uint8_t *data, dynamixel_result_t *status) {
-	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+	if (servo_list == NULL || data == NULL) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
+	uint8_t identifiers[DYNAMIXEL_MAX_SERVO_LIST];
 	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
 	if (res != DNM_OK) {
-		if (status != NULL) {
+		// servo_list_size is valid here unless it was the reason for the failure
+		if (status != NULL && servo_list_size > 0 && servo_list_size <= DYNAMIXEL_MAX_SERVO_LIST) {
 			memset(status, res, servo_list_size);
 		}
 		return res;

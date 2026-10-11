@@ -443,3 +443,158 @@ TEST_F(DynamixelTest, WriteLong) {
     ASSERT_EQ(result, DNM_OK);
     ASSERT_EQ(memcmp(expected_packet, _writeBuffer, sizeof(expected_packet)), 0);
 }
+
+TEST_F(DynamixelTest, InitNullServo) {
+    dynamixel_result_t result = dynamixel_init(nullptr, 1, DYNAMIXEL_XL430, &this->_bus);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, InitNullBus) {
+    dynamixel_servo_t servo{};
+    dynamixel_result_t result = dynamixel_init(&servo, 1, DYNAMIXEL_XL430, nullptr);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, InitUnsupportedType) {
+    dynamixel_servo_t servo{};
+    dynamixel_result_t result = dynamixel_init(&servo, 1, 0xFF, &this->_bus);
+    ASSERT_EQ(result, DNM_NOT_SUPPORTED);
+}
+
+TEST_F(DynamixelTest, InitOk) {
+    dynamixel_servo_t servo{};
+    dynamixel_result_t result = dynamixel_init(&servo, 5, DYNAMIXEL_XL430, &this->_bus);
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(servo.id, 5);
+    ASSERT_EQ(servo.type, DYNAMIXEL_XL430);
+    ASSERT_EQ(servo.bus, &this->_bus);
+}
+
+TEST_F(DynamixelTest, SetLongMultipleNullList) {
+    uint32_t values[1] = {0};
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(
+        nullptr, 1, XL430_CT_RAM_GOAL_POSITION, values);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, SetLongMultipleNullValues) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_servo_t servos[] = {servo};
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(
+        servos, 1, XL430_CT_RAM_GOAL_POSITION, nullptr);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, SetLongMultipleSizeTooLarge) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_servo_t servos[1] = {servo};
+    uint32_t values[1] = {0};
+    // Size of 65 exceeds the wrapper cap (DYNAMIXEL_MAX_SERVO_LIST = 64);
+    // this guards against stack-overflow via VLA usage.
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(
+        servos, 65, XL430_CT_RAM_GOAL_POSITION, values);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, GetLongMultipleSizeTooLarge) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_servo_t servos[1] = {servo};
+    uint32_t values[1];
+    dynamixel_result_t result = dynamixel_get_long_parameter_multiple(
+        servos, 65, XL430_CT_RAM_PRESENT_POSITION, values);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, GetLongMultipleNullList) {
+    uint32_t values[1];
+    dynamixel_result_t result = dynamixel_get_long_parameter_multiple(
+        nullptr, 1, XL430_CT_RAM_PRESENT_POSITION, values);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, GetLongMultipleNullValues) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_servo_t servos[] = {servo};
+    dynamixel_result_t result = dynamixel_get_long_parameter_multiple(
+        servos, 1, XL430_CT_RAM_PRESENT_POSITION, nullptr);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, SetLongMultipleBusMismatch) {
+    dynamixel_bus_t other_bus = {};
+    dynamixel_servo_t s1, s2;
+    dynamixel_init(&s1, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_init(&s2, 2, DYNAMIXEL_XL430, &other_bus);
+    dynamixel_servo_t servos[] = {s1, s2};
+    uint32_t values[] = {0x10, 0x20};
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(
+        servos, 2, XL430_CT_RAM_GOAL_POSITION, values);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, SetLongMultipleInvalidServoInList) {
+    // First servo is initialized correctly; second is hand-built with an
+    // unsupported type so validate_servo() inside the loop rejects it.
+    dynamixel_servo_t s1;
+    dynamixel_init(&s1, 1, DYNAMIXEL_XL430, &this->_bus);
+    dynamixel_servo_t s2 = { 2, /*type=*/0xFF, /*initialized=*/1, &this->_bus };
+    dynamixel_servo_t servos[] = {s1, s2};
+    uint32_t values[] = {0x10, 0x20};
+    dynamixel_result_t result = dynamixel_set_long_parameter_multiple(
+        servos, 2, XL430_CT_RAM_GOAL_POSITION, values);
+    ASSERT_EQ(result, DNM_NOT_SUPPORTED);
+}
+
+TEST_F(DynamixelTest, SetLed) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+
+    const uint8_t prepared_response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C
+    };
+    memcpy(_readBuffer, prepared_response, sizeof(prepared_response));
+    _readsize = sizeof(prepared_response);
+
+    dynamixel_result_t result = dynamixel_set_led(&servo, 1);
+    ASSERT_EQ(result, DNM_OK);
+
+    // Write packet should target XL430_CT_RAM_LED (65 = 0x41) with value 0x01.
+    ASSERT_EQ(_writeBuffer[7], 0x03);   // WRITE instruction
+    ASSERT_EQ(_writeBuffer[8], 0x41);   // address low (LED = 65)
+    ASSERT_EQ(_writeBuffer[9], 0x00);
+    ASSERT_EQ(_writeBuffer[10], 0x01);  // state
+}
+
+TEST_F(DynamixelTest, SetLedRejectsInvalidServo) {
+    dynamixel_result_t result = dynamixel_set_led(nullptr, 1);
+    ASSERT_EQ(result, DNM_API_ERR);
+}
+
+TEST_F(DynamixelTest, SetTorqueEnable) {
+    dynamixel_servo_t servo;
+    dynamixel_init(&servo, 1, DYNAMIXEL_XL430, &this->_bus);
+
+    const uint8_t prepared_response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x04, 0x00, 0x55, 0x00, 0xA1, 0x0C
+    };
+    memcpy(_readBuffer, prepared_response, sizeof(prepared_response));
+    _readsize = sizeof(prepared_response);
+
+    // Pass a non-zero, non-1 value to confirm the wrapper coerces it via `state != 0`.
+    dynamixel_result_t result = dynamixel_set_torque_enable(&servo, 42);
+    ASSERT_EQ(result, DNM_OK);
+
+    ASSERT_EQ(_writeBuffer[7], 0x03);   // WRITE instruction
+    ASSERT_EQ(_writeBuffer[8], 0x40);   // address low (TORQUE_ENABLE = 64)
+    ASSERT_EQ(_writeBuffer[9], 0x00);
+    ASSERT_EQ(_writeBuffer[10], 0x01);  // coerced to 1
+}
+
+TEST_F(DynamixelTest, SetTorqueEnableRejectsInvalidServo) {
+    dynamixel_result_t result = dynamixel_set_torque_enable(nullptr, 0);
+    ASSERT_EQ(result, DNM_API_ERR);
+}

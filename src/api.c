@@ -98,7 +98,7 @@ dynamixel_result_t dynamixel_write(const uint8_t identifier, const uint16_t entr
     }
 
     if (n != (ssize_t) packet_length) {
-        return DNM_API_ERR;
+        return DNM_LL_ERR;
     }
 
     n = dynamixel_read_response(bus, buffer, sizeof(buffer));
@@ -219,8 +219,7 @@ dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, const 
     header.length = (uint16_t) (3 + param_length);
     header.instruction = SYNC_WRITE;
 
-    // Buffers are sized for the request, so the stack use follows the number of servos
-    uint8_t param[param_length];
+    uint8_t param[DYNAMIXEL_MAX_PACKET_SIZE];
     param[0] = entry & 0xFF;
     param[1] = (entry >> 8) & 0xFF;
     param[2] = entry_size & 0xFF;
@@ -232,7 +231,7 @@ dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, const 
         memcpy(&slot[1], &data[i * entry_size], entry_size);
     }
 
-    uint8_t buffer[14 + count * slot_size];
+    uint8_t buffer[DYNAMIXEL_MAX_PACKET_SIZE];
     size_t packet_length;
 
     const dynamixel_error_t result = dynamixel_build_packet(header, param, param_length, buffer, sizeof(buffer),
@@ -268,7 +267,7 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
     if (count > DYNAMIXEL_MAX_PACKET_SIZE / entry_size) {
         return DNM_API_ERR;
     }
-    uint8_t data[count * entry_size];
+    uint8_t data[DYNAMIXEL_MAX_PACKET_SIZE];
     for (size_t i = 0; i < count; i++) {
         for (size_t b = 0; b < entry_size; b++) {
             data[i * entry_size + b] = (value[i] >> (8 * b)) & 0xFF;
@@ -307,19 +306,16 @@ dynamixel_result_t dynamixel_sync_read_bytes(const uint8_t *identifiers, const s
     header.length = (uint16_t) (7 + count);
     header.instruction = SYNC_READ;
 
-    // Buffers are sized for the request and reply, so the stack use follows the
-    // number of servos and the entry size
-    uint8_t param[4 + count];
+    uint8_t param[DYNAMIXEL_MAX_PACKET_SIZE];
     param[0] = entry & 0xFF;
     param[1] = (entry >> 8) & 0xFF;
     param[2] = entry_size & 0xFF;
     param[3] = (entry_size >> 8) & 0xFF;
     memcpy(&param[4], identifiers, count);
 
-    // Used for the request first, then for each reply
-    const size_t request_size = 14 + count;
-    const size_t reply_size = 11 + (size_t) entry_size;
-    uint8_t buffer[request_size > reply_size ? request_size : reply_size];
+    // Used for the request first, then for each reply. Both fit: the request is
+    // 14 + count and a reply 11 + entry_size bytes, checked above.
+    uint8_t buffer[DYNAMIXEL_MAX_PACKET_SIZE];
     size_t packet_length;
 
     dynamixel_error_t result = dynamixel_build_packet(header, param, header.length - 3, buffer, sizeof(buffer),
@@ -399,8 +395,8 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
     if (count > DYNAMIXEL_MAX_PACKET_SIZE / entry_size) {
         return DNM_API_ERR;
     }
-    uint8_t data[count * entry_size];
-    dynamixel_result_t status[count];
+    uint8_t data[DYNAMIXEL_MAX_PACKET_SIZE];
+    dynamixel_result_t status[DYNAMIXEL_MAX_PACKET_SIZE];
 
     const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, count, entry, entry_size, data, status,
                                                                 bus);
@@ -449,6 +445,10 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         if (n <= 0) {
             return n;
         }
+        if ((size_t) n > header_size - received) {
+            // Bus driver returned more bytes than requested - protocol violation.
+            return LL_BUFFER_OVERFLOW;
+        }
         received += (size_t) n;
     }
 
@@ -468,6 +468,10 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         const ssize_t n = dynamixel_bus_read(bus, buffer + received, packet_size - received);
         if (n <= 0) {
             return n;
+        }
+        if ((size_t) n > packet_size - received) {
+            // Bus driver returned more bytes than requested - protocol violation.
+            return LL_BUFFER_OVERFLOW;
         }
         received += (size_t) n;
     }
