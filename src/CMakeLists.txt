@@ -19,6 +19,8 @@ target_include_directories(dynamixel
         PUBLIC ../include ../priv_include
 )
 
+target_compile_options(dynamixel PRIVATE ${DYNAMIXEL_WARNING_FLAGS})
+
 # Enable coverage for Debug builds
 target_compile_options(dynamixel PRIVATE "$<$<CONFIG:COVERAGE>:--coverage>")
 target_link_options(dynamixel PRIVATE "$<$<CONFIG:COVERAGE>:--coverage>")

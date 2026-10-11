@@ -39,6 +39,10 @@ target_link_libraries(
         dynamixel
 )
 
+foreach(test_target api_test protocol_test dynamixel_bus_test dynamixel_test)
+        target_compile_options(${test_target} PRIVATE ${DYNAMIXEL_WARNING_FLAGS})
+endforeach()
+
 include(GoogleTest)
 
 gtest_discover_tests(api_test)

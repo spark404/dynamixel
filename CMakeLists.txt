@@ -16,7 +16,9 @@ project(
 )
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-        add_compile_options(-Wall -Wextra -pedantic -Werror)
+        # Applied per target (not globally) so that third party code such as
+        # googletest is not built with -Werror.
+        set(DYNAMIXEL_WARNING_FLAGS -Wall -Wextra -pedantic -Werror)
         include(CTest)
 endif()
 
