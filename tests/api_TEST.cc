@@ -560,6 +560,340 @@ TEST_F(ApiTest, SyncReadLong) {
     }
 }
 
+TEST_F(ApiTest, SyncReadBytesLoadVelocityPosition) {
+    // Present Load (126, 2 bytes), Present Velocity (128, 4) and Present Position (132, 4) in one read
+    const uint8_t expected_packet[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x0A, 0x00, 0x82, 0x7E, 0x00, 0x0A, 0x00, 0x01, 0x02, 0x03,
+        0x59, 0x1B,
+    };
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], DNM_OK);
+    EXPECT_EQ(status[2], DNM_OK);
+    ASSERT_EQ(_writesize, (ssize_t) sizeof(expected_packet));
+    EXPECT_EQ(memcmp(_writeBuffer, expected_packet, sizeof(expected_packet)), 0);
+
+    int16_t load;
+    int32_t velocity;
+    uint32_t position;
+    memcpy(&load, &data[0], 2); memcpy(&velocity, &data[2], 4); memcpy(&position, &data[6], 4);
+    EXPECT_EQ(load, -35); EXPECT_EQ(velocity, 100); EXPECT_EQ(position, 2048u);
+    memcpy(&load, &data[10], 2); memcpy(&velocity, &data[12], 4); memcpy(&position, &data[16], 4);
+    EXPECT_EQ(load, 120); EXPECT_EQ(velocity, -250); EXPECT_EQ(position, 1000u);
+    memcpy(&load, &data[20], 2); memcpy(&velocity, &data[22], 4); memcpy(&position, &data[26], 4);
+    EXPECT_EQ(load, -1); EXPECT_EQ(velocity, 0); EXPECT_EQ(position, 3500u);
+    EXPECT_EQ(_readsize, 0) << "Not all of the response was consumed";
+}
+
+TEST_F(ApiTest, SyncReadBytesFragmentedResponse) {
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    _maxReadChunk = 5;
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+
+    ASSERT_EQ(dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, nullptr, &_bus), DNM_OK);
+    EXPECT_EQ(memcmp(data, response + 9, 10), 0);   // parameters of the first reply
+    EXPECT_EQ(_readsize, 0);
+}
+
+TEST_F(ApiTest, SyncReadBytesCrcErrorContinues) {
+    // The reply of servo 2 is damaged: the others are still read, the damaged one is left untouched
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0x00, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+        0xFF, 0xFF, 0xFD, 0x00, 0x04, 0x0E, 0x00, 0x55, 0x00, 0x07, 0x00, 0x08, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0xD8, 0x61,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03, 0x04};
+    uint8_t data[4 * 10];
+    memset(data, 0xEE, sizeof(data));
+    dynamixel_result_t status[4];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 4, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_CRC_FAIL);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], DNM_RECV_CRC_FAIL);
+    EXPECT_EQ(status[2], DNM_OK);
+    EXPECT_EQ(status[3], DNM_OK);
+    EXPECT_EQ(memcmp(&data[0], response + 9, 10), 0);
+    for (int i = 10; i < 20; i++) EXPECT_EQ(data[i], 0xEE) << "Data of the failed servo was modified at " << i;
+    EXPECT_EQ(data[20], 0xFF);   // servo 3 load, low byte
+    EXPECT_EQ(_readsize, 0) << "The read stopped early";
+}
+
+TEST_F(ApiTest, SyncReadBytesHardwareAlertKeepsData) {
+    // Alert flag (0x80): the servo has a hardware error, but its data is valid
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x80, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0x82, 0x65,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    memset(data, 0xEE, sizeof(data));
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, STATUS_ALERT_FLAG);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], STATUS_ALERT_FLAG);
+    EXPECT_EQ(status[2], DNM_OK);
+    int32_t velocity;
+    memcpy(&velocity, &data[12], 4);
+    EXPECT_EQ(velocity, -250);
+    EXPECT_EQ(_readsize, 0);
+}
+
+TEST_F(ApiTest, SyncReadBytesServoErrorHasNoData) {
+    // Error 0x07 (access error) comes without parameters
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x04, 0x00, 0x55, 0x07, 0x38, 0x8C,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    memset(data, 0xEE, sizeof(data));
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, STATUS_ACCESS_ERROR);
+    EXPECT_EQ(status[1], STATUS_ACCESS_ERROR);
+    EXPECT_EQ(status[2], DNM_OK);
+    for (int i = 10; i < 20; i++) EXPECT_EQ(data[i], 0xEE);
+}
+
+TEST_F(ApiTest, SyncReadBytesIdMismatch) {
+    // Servo 2's slot is answered by servo 9
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x09, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0x87, 0x4E,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    memset(data, 0xEE, sizeof(data));
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_ID_MISMATCH);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], DNM_RECV_ID_MISMATCH);
+    EXPECT_EQ(status[2], DNM_OK);
+    for (int i = 10; i < 20; i++) EXPECT_EQ(data[i], 0xEE);
+}
+
+TEST_F(ApiTest, SyncReadBytesLengthMismatch) {
+    // Servo 2 answers with 6 bytes instead of 10
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0A, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0x1C, 0x58,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    memset(data, 0xEE, sizeof(data));
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_LENGTH_MISMATCH);
+    EXPECT_EQ(status[1], DNM_RECV_LENGTH_MISMATCH);
+    EXPECT_EQ(status[2], DNM_OK);
+    for (int i = 10; i < 20; i++) EXPECT_EQ(data[i], 0xEE);
+}
+
+TEST_F(ApiTest, SyncReadBytesNotAStatusPacket) {
+    // A well formed packet with instruction 0x02 (READ) instead of 0x55
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x02, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xDA, 0x1C,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_NOT_STATUS);
+    EXPECT_EQ(status[1], DNM_RECV_NOT_STATUS);
+    EXPECT_EQ(status[2], DNM_OK);
+}
+
+TEST_F(ApiTest, SyncReadBytesTimeoutStopsTheRead) {
+    // Only servos 1 and 2 answer. The rest cannot be trusted to ever answer.
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03, 0x04};
+    uint8_t data[4 * 10];
+    dynamixel_result_t status[4];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 4, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_LL_TIMEOUT);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], DNM_OK);
+    EXPECT_EQ(status[2], DNM_LL_TIMEOUT);
+    EXPECT_EQ(status[3], DNM_LL_TIMEOUT);
+}
+
+TEST_F(ApiTest, SyncReadBytesFirstErrorIsReturned) {
+    // A damaged reply for servo 1, then a timeout: the first error wins, the statuses tell the rest
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0xFF, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_CRC_FAIL);
+    EXPECT_EQ(status[0], DNM_RECV_CRC_FAIL);
+    EXPECT_EQ(status[1], DNM_OK);
+    EXPECT_EQ(status[2], DNM_LL_TIMEOUT);
+}
+
+TEST_F(ApiTest, SyncReadBytesBadHeaderStopsTheRead) {
+    // The stream is out of step (no packet magic): the following replies can not be located
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x0E, 0x00, 0x55, 0x00, 0xDD, 0xFF, 0x64, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x13, 0x7D,
+        0x12, 0x34, 0xFD, 0x00, 0x02, 0x0E, 0x00, 0x55, 0x00, 0x78, 0x00, 0x06, 0xFF, 0xFF, 0xFF, 0xE8, 0x03, 0x00, 0x00, 0xBD, 0x45,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x0E, 0x00, 0x55, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x0D, 0x00, 0x00, 0xA4, 0x0C,
+    };
+    prepare_response(response, sizeof(response));
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    uint8_t data[3 * 10];
+    dynamixel_result_t status[3];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, 3, 126, 10, data, status, &_bus);
+
+    EXPECT_EQ(result, DNM_LL_ERR);
+    EXPECT_EQ(status[0], DNM_OK);
+    EXPECT_EQ(status[1], DNM_LL_ERR);
+    EXPECT_EQ(status[2], DNM_LL_ERR);
+}
+
+TEST_F(ApiTest, SyncReadBytesBusReadError) {
+    _readsize = -1;
+    const uint8_t identifiers[] = {0x01, 0x02};
+    uint8_t data[2 * 10];
+    dynamixel_result_t status[2];
+
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 126, 10, data, status, &_bus), DNM_LL_ERR);
+    EXPECT_EQ(status[0], DNM_LL_ERR);
+    EXPECT_EQ(status[1], DNM_LL_ERR);
+}
+
+TEST_F(ApiTest, SyncReadBytesBusWriteTimeout) {
+    _writeTimeout = true;
+    const uint8_t identifiers[] = {0x01, 0x02};
+    uint8_t data[2 * 10];
+    dynamixel_result_t status[2];
+
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 126, 10, data, status, &_bus), DNM_LL_TIMEOUT);
+    EXPECT_EQ(status[0], DNM_LL_TIMEOUT);
+    EXPECT_EQ(status[1], DNM_LL_TIMEOUT);
+}
+
+TEST_F(ApiTest, SyncReadBytesInvalidArguments) {
+    const uint8_t identifiers[] = {0x01, 0x02};
+    uint8_t data[2 * 10];
+    dynamixel_result_t status[2] = {0, 0};
+
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 126, 10, data, status, nullptr), DNM_API_ERR);
+    EXPECT_EQ(dynamixel_sync_read_bytes(nullptr, 2, 126, 10, data, status, &_bus), DNM_API_ERR);
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 126, 10, nullptr, status, &_bus), DNM_API_ERR);
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 0, 126, 10, data, status, &_bus), DNM_API_ERR);
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 126, 0, data, status, &_bus), DNM_API_ERR);
+    EXPECT_EQ(status[0], DNM_API_ERR);
+    EXPECT_EQ(_writesize, 0) << "Nothing may be sent for an invalid request";
+}
+
+TEST_F(ApiTest, SyncReadBytesDoesNotFitPacket) {
+    // A reply of 11 + 246 = 257 bytes does not fit; neither does a request of 14 + 243 bytes
+    uint8_t identifiers[243] = {0};
+    uint8_t data[243] = {0};
+
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 2, 0, 246, data, nullptr, &_bus), DNM_API_ERR);
+    EXPECT_EQ(dynamixel_sync_read_bytes(identifiers, 243, 0, 1, data, nullptr, &_bus), DNM_API_ERR);
+    EXPECT_EQ(_writesize, 0);
+}
+
+TEST_F(ApiTest, SyncReadLongContinuesAfterCrcError) {
+    // The uint32 API reports the first error but still fills in the servos that were read
+    const uint8_t identifiers[] = {0x01, 0x02, 0x03};
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x08, 0x00, 0x55, 0x00, 0x92, 0x07, 0x00, 0x00, 0xEA, 0x50,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x08, 0x00, 0x55, 0x00, 0xF7, 0x0B, 0xFF, 0x00, 0xAB, 0x1E,
+        0xFF, 0xFF, 0xFD, 0x00, 0x03, 0x08, 0x00, 0x55, 0x00, 0xCC, 0x0C, 0x00, 0x00, 0xAE, 0xC4,
+    };
+    prepare_response(response, sizeof(response));
+    uint32_t values[3] = {111, 222, 333};
+
+    const dynamixel_result_t result = dynamixel_sync_read(identifiers, 3, 132, 4, values, &_bus);
+
+    EXPECT_EQ(result, DNM_RECV_CRC_FAIL);
+    EXPECT_EQ(values[0], 1938u);
+    EXPECT_EQ(values[1], 222u);
+    EXPECT_EQ(values[2], 3276u);
+}
+
+TEST_F(ApiTest, SyncReadWord) {
+    const uint8_t identifiers[] = {0x01, 0x02};
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x06, 0x00, 0x55, 0x00, 0x34, 0x12, 0xA9, 0xE3,
+        0xFF, 0xFF, 0xFD, 0x00, 0x02, 0x06, 0x00, 0x55, 0x00, 0xCD, 0xAB, 0x03, 0xF5,
+    };
+    prepare_response(response, sizeof(response));
+    uint32_t values[2] = {0, 0};
+
+    ASSERT_EQ(dynamixel_sync_read(identifiers, 2, 70, 2, values, &_bus), DNM_OK);
+    EXPECT_EQ(values[0], 0x1234u);
+    EXPECT_EQ(values[1], 0xABCDu);
+}
+
+TEST_F(ApiTest, SyncReadInvalidEntrySize) {
+    const uint8_t identifiers[] = {0x01};
+    uint32_t values[1];
+
+    ASSERT_EQ(dynamixel_sync_read(identifiers, 1, 132, 3, values, &_bus), DNM_API_ERR);
+    ASSERT_EQ(_writesize, 0);
+}
+
 TEST_F(ApiTest, SyncReadLongCRCError) {
     uint8_t expected_packet[] = {
         0xFF, 0xFF, 0xFD, 0x00, 0xFE, 0x19, 0x00, 0x82,

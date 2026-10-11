@@ -17,5 +17,7 @@ typedef uint8_t dynamixel_result_t;
 #define DNM_NOT_SUPPORTED   67
 #define DNM_LL_ERR          68
 #define DNM_LL_TIMEOUT      69
+#define DNM_RECV_ID_MISMATCH     70  /* reply came from a different servo than asked */
+#define DNM_RECV_LENGTH_MISMATCH 71  /* reply carries a different amount of data than asked */
 
 #endif //DYNAMIXEL_ERROR_H

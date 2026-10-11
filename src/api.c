@@ -219,7 +219,8 @@ dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, const 
     header.length = (uint16_t) (3 + param_length);
     header.instruction = SYNC_WRITE;
 
-    uint8_t param[DYNAMIXEL_MAX_PACKET_SIZE];
+    // Buffers are sized for the request, so the stack use follows the number of servos
+    uint8_t param[param_length];
     param[0] = entry & 0xFF;
     param[1] = (entry >> 8) & 0xFF;
     param[2] = entry_size & 0xFF;
@@ -231,7 +232,7 @@ dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, const 
         memcpy(&slot[1], &data[i * entry_size], entry_size);
     }
 
-    uint8_t buffer[DYNAMIXEL_MAX_PACKET_SIZE];
+    uint8_t buffer[14 + count * slot_size];
     size_t packet_length;
 
     const dynamixel_error_t result = dynamixel_build_packet(header, param, param_length, buffer, sizeof(buffer),
@@ -264,10 +265,10 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
     // Pack the values, little endian, to the width of the entry. The byte API
     // checks that the request fits in a packet, so refuse a count that would
     // not even fit in the local staging buffer.
-    uint8_t data[DYNAMIXEL_MAX_PACKET_SIZE];
-    if (count > sizeof(data) / entry_size) {
+    if (count > DYNAMIXEL_MAX_PACKET_SIZE / entry_size) {
         return DNM_API_ERR;
     }
+    uint8_t data[count * entry_size];
     for (size_t i = 0; i < count; i++) {
         for (size_t b = 0; b < entry_size; b++) {
             data[i * entry_size + b] = (value[i] >> (8 * b)) & 0xFF;
@@ -277,88 +278,146 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
     return dynamixel_sync_write_bytes(identifiers, count, entry, entry_size, data, bus);
 }
 
-dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t count, const uint16_t entry,
-                                       const uint8_t entry_size, uint32_t *values, const dynamixel_bus_t *bus) {
-    if (bus == NULL) {
+static void set_status_range(dynamixel_result_t *status, const size_t first, const size_t count,
+                             const dynamixel_result_t value) {
+    if (status == NULL) {
+        return;
+    }
+    for (size_t i = first; i < count; i++) {
+        status[i] = value;
+    }
+}
+
+dynamixel_result_t dynamixel_sync_read_bytes(const uint8_t *identifiers, const size_t count, const uint16_t entry,
+                                             const uint16_t entry_size, uint8_t *data, dynamixel_result_t *status,
+                                             const dynamixel_bus_t *bus) {
+    if (bus == NULL || identifiers == NULL || data == NULL || count == 0 || entry_size == 0) {
+        set_status_range(status, 0, count, DNM_API_ERR);
         return DNM_API_ERR;
     }
+
+    // The request is 14 + count bytes, a reply 11 + entry_size bytes
+    if (count > DYNAMIXEL_MAX_PACKET_SIZE - 14 || entry_size > DYNAMIXEL_MAX_PACKET_SIZE - 11) {
+        set_status_range(status, 0, count, DNM_API_ERR);
+        return DNM_API_ERR;
+    }
+
     dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
     header.id = 0xFE;
-    header.length = 7 + count;
+    header.length = (uint16_t) (7 + count);
     header.instruction = SYNC_READ;
 
-    if (entry_size != 1 && entry_size != 2 && entry_size != 4) {
-        return DNM_API_ERR;
-    }
-
-    uint8_t param[128];
-    if (entry_size * count + 4 > sizeof(param)) {
-        return DNM_API_ERR;
-    }
-
+    // Buffers are sized for the request and reply, so the stack use follows the
+    // number of servos and the entry size
+    uint8_t param[4 + count];
     param[0] = entry & 0xFF;
     param[1] = (entry >> 8) & 0xFF;
     param[2] = entry_size & 0xFF;
     param[3] = (entry_size >> 8) & 0xFF;
+    memcpy(&param[4], identifiers, count);
 
-    for (size_t i = 0; i < count; i++) {
-        param[4 + i] = identifiers[i];
-    }
-
-    uint8_t buffer[128];
+    // Used for the request first, then for each reply
+    const size_t request_size = 14 + count;
+    const size_t reply_size = 11 + (size_t) entry_size;
+    uint8_t buffer[request_size > reply_size ? request_size : reply_size];
     size_t packet_length;
 
     dynamixel_error_t result = dynamixel_build_packet(header, param, header.length - 3, buffer, sizeof(buffer),
                                                       &packet_length);
     if (result != DYNAMIXEL_ERROR_NONE) {
+        set_status_range(status, 0, count, DNM_API_ERR);
         return DNM_API_ERR;
     }
     ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
     if (n == 0) {
+        set_status_range(status, 0, count, DNM_LL_TIMEOUT);
         return DNM_LL_TIMEOUT;
     }
 
     if (n != (ssize_t) packet_length) {
+        set_status_range(status, 0, count, DNM_LL_ERR);
         return DNM_LL_ERR;
     }
 
+    dynamixel_result_t first_error = DNM_OK;
     for (size_t i = 0; i < count; i++) {
+        dynamixel_result_t outcome = DNM_OK;
+
         n = dynamixel_read_response(bus, buffer, sizeof(buffer));
-        if (n == 0) {
-            return DNM_LL_TIMEOUT;
+        if (n <= 0) {
+            // Nothing more can be read: this servo and all following ones
+            outcome = n == 0 ? DNM_LL_TIMEOUT : DNM_LL_ERR;
+            set_status_range(status, i, count, outcome);
+            return first_error != DNM_OK ? first_error : outcome;
         }
 
-        if (n < 0) {
-            return DNM_LL_ERR;
+        uint8_t servo_status;
+        outcome = dynamixel_parse_response(buffer, n, &servo_status);
+        if (outcome == DNM_OK && buffer[4] != identifiers[i]) {
+            outcome = DNM_RECV_ID_MISMATCH;
         }
 
-        uint8_t status;
-        result = dynamixel_parse_response(buffer, n, &status);
-        if (result != DNM_OK) {
-            return result;
+        if (outcome == DNM_OK) {
+            uint8_t *parameters = NULL;
+            size_t parameter_length = 0;
+
+            if ((servo_status & ~STATUS_ALERT_FLAG) != 0) {
+                // The servo reports an error and sends no data
+                outcome = servo_status;
+            } else if (dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length) != DNM_OK) {
+                outcome = DNM_API_ERR;
+            } else if (parameter_length != entry_size) {
+                outcome = DNM_RECV_LENGTH_MISMATCH;
+            } else {
+                // A hardware alert flag does not invalidate the data
+                memcpy(&data[i * entry_size], parameters, entry_size);
+                outcome = servo_status;
+            }
         }
 
-        if (status != STATUS_OK) {
-            return status;
+        if (status != NULL) {
+            status[i] = outcome;
         }
-
-        uint8_t *parameters = NULL;
-        size_t parameter_length;
-        result = dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length);
-        if (result != DNM_OK) {
-            return result;
-        }
-
-        if (parameter_length == 1) {
-            values[i] = parameters[0];
-        } else if (parameter_length == 2) {
-            values[i] = parameters[0] | parameters[1] << 8;
-        } else {
-            values[i] = parameters[0] | parameters[1] << 8 | parameters[2] << 16 | parameters[3] << 24;
+        if (outcome != DNM_OK && first_error == DNM_OK) {
+            first_error = outcome;
         }
     }
 
-    return DNM_OK; // This API call does not return a status result
+    return first_error;
+}
+
+dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t count, const uint16_t entry,
+                                       const uint8_t entry_size, uint32_t *values, const dynamixel_bus_t *bus) {
+    if (bus == NULL || identifiers == NULL || values == NULL || count == 0) {
+        return DNM_API_ERR;
+    }
+
+    if (entry_size != 1 && entry_size != 2 && entry_size != 4) {
+        return DNM_API_ERR;
+    }
+
+    if (count > DYNAMIXEL_MAX_PACKET_SIZE / entry_size) {
+        return DNM_API_ERR;
+    }
+    uint8_t data[count * entry_size];
+    dynamixel_result_t status[count];
+
+    const dynamixel_result_t result = dynamixel_sync_read_bytes(identifiers, count, entry, entry_size, data, status,
+                                                                bus);
+
+    // Unpack what was read, little endian. Servos without data keep their value.
+    for (size_t i = 0; i < count; i++) {
+        if (status[i] != DNM_OK && status[i] != STATUS_ALERT_FLAG) {
+            continue;
+        }
+        uint32_t value = 0;
+        for (size_t b = 0; b < entry_size; b++) {
+            value |= (uint32_t) data[i * entry_size + b] << (8 * b);
+        }
+        values[i] = value;
+    }
+
+    return result;
 }
 
 /**
@@ -441,7 +500,8 @@ static dynamixel_result_t dynamixel_parse_response(const uint8_t *buffer, const 
 }
 
 static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, const size_t len, uint8_t **parameters, size_t *length) {
-    if (len < 9) {
+    // header (7), instruction, error, parameters, crc (2)
+    if (len < 11) {
         return DNM_API_ERR;
     }
 
