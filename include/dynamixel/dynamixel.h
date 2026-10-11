@@ -1,6 +1,7 @@
 #ifndef DYNAMIXEL_H
 #define DYNAMIXEL_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "dynamixel_error.h"
@@ -70,6 +71,23 @@ typedef struct {
     dynamixel_bus_t *bus;
 } dynamixel_servo_t;
 
+/* Decode little endian values from the data returned by dynamixel_get_bytes_multiple() */
+static inline uint16_t dynamixel_decode_u16(const uint8_t *p) {
+    return (uint16_t) (p[0] | (p[1] << 8));
+}
+
+static inline int16_t dynamixel_decode_i16(const uint8_t *p) {
+    return (int16_t) dynamixel_decode_u16(p);
+}
+
+static inline uint32_t dynamixel_decode_u32(const uint8_t *p) {
+    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) | ((uint32_t) p[3] << 24);
+}
+
+static inline int32_t dynamixel_decode_i32(const uint8_t *p) {
+    return (int32_t) dynamixel_decode_u32(p);
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -89,6 +107,41 @@ dynamixel_result_t dynamixel_set_long_parameter(const dynamixel_servo_t *servo, 
 
 dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t *servo_list, size_t servo_list_size, uint16_t parameter, const uint32_t *values);
 dynamixel_result_t dynamixel_get_long_parameter_multiple(const dynamixel_servo_t *servo_list, size_t servo_list_size, uint16_t parameter, uint32_t *values);
+
+/**
+ * Read length bytes at control table address parameter from every servo in the
+ * list with one Sync Read. The data of servo_list[i] is stored at
+ * data[i * length]; data must hold servo_list_size * length bytes.
+ *
+ * Adjacent registers can be read together, for example Present Load (126),
+ * Present Velocity (128) and Present Position (132) are one 10 byte read of the
+ * address 126. Use the dynamixel_decode_*() helpers to pick the values.
+ *
+ * status is optional (NULL) and receives one result per servo, servo_list_size
+ * entries: DNM_OK, STATUS_ALERT_FLAG (hardware alert, the data is valid), or the
+ * reason this servo has no data. See dynamixel_sync_read_bytes() in
+ * priv_include/dynamixel/api.h for the full list. The data of a servo without
+ * usable data is left unchanged. A damaged reply does not stop the read; a
+ * timeout or a lost packet header does, and marks this and all following servos.
+ *
+ * Returns the first result that is not DNM_OK, or DNM_OK. The request must fit
+ * a packet of DYNAMIXEL_MAX_PACKET_SIZE (256) bytes.
+ */
+dynamixel_result_t dynamixel_get_bytes_multiple(const dynamixel_servo_t *servo_list, size_t servo_list_size,
+                                                uint16_t parameter, uint16_t length, uint8_t *data,
+                                                dynamixel_result_t *status);
+
+/**
+ * Write length bytes at control table address parameter to every servo in the
+ * list with one Sync Write. The data for servo_list[i] is taken from
+ * data[i * length]. Adjacent registers can be written together, for example
+ * Profile Velocity (112) and Goal Position (116) are one 8 byte write at 112.
+ *
+ * The request must fit a packet of DYNAMIXEL_MAX_PACKET_SIZE (256) bytes,
+ * 14 + servo_list_size * (length + 1).
+ */
+dynamixel_result_t dynamixel_set_bytes_multiple(const dynamixel_servo_t *servo_list, size_t servo_list_size,
+                                                uint16_t parameter, uint16_t length, const uint8_t *data);
 
 #ifdef __cplusplus
 }

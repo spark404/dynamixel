@@ -123,18 +123,20 @@ dynamixel_result_t dynamixel_set_long_parameter(const dynamixel_servo_t *servo, 
 	return dynamixel_write(servo->id, parameter, 4, value, servo->bus);
 }
 
-dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint32_t *values) {
-	if (servo_list == NULL) {
+/* No bus can have more servos than there are identifiers (0..252) */
+#define DYNAMIXEL_MAX_SERVOS 253
+
+/**
+ * Check a servo list for a Sync Read or Write and copy its identifiers: the
+ * list must not be empty, all servos must be on the same bus and be supported.
+ */
+static dynamixel_result_t collect_identifiers(const dynamixel_servo_t *servo_list, const size_t servo_list_size,
+                                              uint8_t *identifiers) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
 		return DNM_API_ERR;
 	}
 
-	uint8_t identifiers[servo_list_size];
-	memset(identifiers, 0, sizeof(identifiers));
-
-	// Verify all servos are on the same bus
-	// Verify all servos are correctly configured
-	// Convert the servos to a list of identifiers
-	for (size_t i=0; i < servo_list_size; i++) {
+	for (size_t i = 0; i < servo_list_size; i++) {
 		if (servo_list[0].bus != servo_list[i].bus) {
 			return DNM_API_ERR;
 		}
@@ -145,37 +147,68 @@ dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t
 		}
 
 		identifiers[i] = servo_list[i].id;
+	}
+
+	return DNM_OK;
+}
+
+dynamixel_result_t dynamixel_set_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint32_t *values) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[servo_list_size];
+	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
+	if (res != DNM_OK) {
+		return res;
 	}
 
 	return dynamixel_sync_write(identifiers, servo_list_size, parameter, 4, values, servo_list[0].bus);
 }
 
 dynamixel_result_t dynamixel_get_long_parameter_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, uint32_t *values) {
-	if (servo_list == NULL) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
 		return DNM_API_ERR;
 	}
 
 	uint8_t identifiers[servo_list_size];
-	memset(identifiers, 0, sizeof(identifiers));
-
-
-	// Verify all servos are on the same bus
-	// Verify all servos are correctly configured
-	// Convert the servos to a list of identifiers
-	for (size_t i=0; i < servo_list_size; i++) {
-		if (servo_list[0].bus != servo_list[i].bus) {
-			return DNM_API_ERR;
-		}
-
-		const dynamixel_result_t res = validate_servo(&servo_list[i]);
-		if (res != DNM_OK) {
-			return res;
-		}
-
-		identifiers[i] = servo_list[i].id;
+	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
+	if (res != DNM_OK) {
+		return res;
 	}
 
 	return dynamixel_sync_read(identifiers, servo_list_size, parameter, 4, values, servo_list[0].bus);
+}
+
+dynamixel_result_t dynamixel_set_bytes_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint16_t length, const uint8_t *data) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[servo_list_size];
+	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
+	if (res != DNM_OK) {
+		return res;
+	}
+
+	return dynamixel_sync_write_bytes(identifiers, servo_list_size, parameter, length, data, servo_list[0].bus);
+}
+
+dynamixel_result_t dynamixel_get_bytes_multiple(const dynamixel_servo_t *servo_list, const size_t servo_list_size, const uint16_t parameter, const uint16_t length, uint8_t *data, dynamixel_result_t *status) {
+	if (servo_list == NULL || servo_list_size == 0 || servo_list_size > DYNAMIXEL_MAX_SERVOS) {
+		return DNM_API_ERR;
+	}
+
+	uint8_t identifiers[servo_list_size];
+	const dynamixel_result_t res = collect_identifiers(servo_list, servo_list_size, identifiers);
+	if (res != DNM_OK) {
+		if (status != NULL) {
+			memset(status, res, servo_list_size);
+		}
+		return res;
+	}
+
+	return dynamixel_sync_read_bytes(identifiers, servo_list_size, parameter, length, data, status, servo_list[0].bus);
 }
 
 static dynamixel_result_t validate_servo(const dynamixel_servo_t *servo) {
