@@ -200,49 +200,46 @@ dynamixel_result_t dynamixel_read(const uint8_t identifier, const uint16_t entry
     return DNM_OK;
 }
 
-dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t count, const uint16_t entry,
-                                        const uint8_t entry_size, const uint32_t *value, const dynamixel_bus_t *bus) {
-    if (bus == NULL) {
+dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, const size_t count, const uint16_t entry,
+                                              const uint16_t entry_size, const uint8_t *data,
+                                              const dynamixel_bus_t *bus) {
+    if (bus == NULL || identifiers == NULL || data == NULL || count == 0 || entry_size == 0) {
         return DNM_API_ERR;
     }
+
+    // Parameters are the 4 byte address and size, followed by an id and the data for each servo
+    const size_t slot_size = (size_t) entry_size + 1;
+    if (count > (DYNAMIXEL_MAX_PACKET_SIZE - 14) / slot_size) {
+        return DNM_API_ERR;
+    }
+    const size_t param_length = 4 + count * slot_size;
 
     dynamixel_packet_header_t header = DYNAMIXEL_PACKET_HEADER_DEFAULT;
     header.id = 0xFE;
-    header.length = 7 + count * (entry_size + 1);
+    header.length = (uint16_t) (3 + param_length);
     header.instruction = SYNC_WRITE;
 
-    if (entry_size != 1 && entry_size != 2 && entry_size != 4) {
-        return DNM_API_ERR;
-    }
-
-    uint8_t param[256];
-    if ((entry_size + 1) * count + 4 > sizeof(param)) {
-        return DNM_API_ERR;
-    }
-
+    uint8_t param[DYNAMIXEL_MAX_PACKET_SIZE];
     param[0] = entry & 0xFF;
     param[1] = (entry >> 8) & 0xFF;
     param[2] = entry_size & 0xFF;
     param[3] = (entry_size >> 8) & 0xFF;
 
     for (size_t i = 0; i < count; i++) {
-        const size_t start_index = (entry_size + 1) * i;
-        param[4 + start_index] = identifiers[i];
-        param[4 + start_index + 1] = value[i] & 0xFF;
-        param[4 + start_index + 2] = value[i] >> 8 & 0xFF;
-        param[4 + start_index + 3] = value[i] >> 16 & 0xFF;
-        param[4 + start_index + 4] = value[i] >> 24 & 0xFF;
+        uint8_t *slot = &param[4 + i * slot_size];
+        slot[0] = identifiers[i];
+        memcpy(&slot[1], &data[i * entry_size], entry_size);
     }
 
-    uint8_t buffer[256];
+    uint8_t buffer[DYNAMIXEL_MAX_PACKET_SIZE];
     size_t packet_length;
 
-    dynamixel_error_t result = dynamixel_build_packet(header, param, header.length - 3, buffer, sizeof(buffer),
-                                                      &packet_length);
+    const dynamixel_error_t result = dynamixel_build_packet(header, param, param_length, buffer, sizeof(buffer),
+                                                            &packet_length);
     if (result != DYNAMIXEL_ERROR_NONE) {
         return DNM_API_ERR;
     }
-    ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
+    const ssize_t n = dynamixel_bus_write(bus, buffer, packet_length);
     if (n == 0) {
         return DNM_LL_TIMEOUT;
     }
@@ -252,6 +249,32 @@ dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t
     }
 
     return DNM_OK; // This API call does not return a status result
+}
+
+dynamixel_result_t dynamixel_sync_write(const uint8_t *identifiers, const size_t count, const uint16_t entry,
+                                        const uint8_t entry_size, const uint32_t *value, const dynamixel_bus_t *bus) {
+    if (bus == NULL || identifiers == NULL || value == NULL || count == 0) {
+        return DNM_API_ERR;
+    }
+
+    if (entry_size != 1 && entry_size != 2 && entry_size != 4) {
+        return DNM_API_ERR;
+    }
+
+    // Pack the values, little endian, to the width of the entry. The byte API
+    // checks that the request fits in a packet, so refuse a count that would
+    // not even fit in the local staging buffer.
+    uint8_t data[DYNAMIXEL_MAX_PACKET_SIZE];
+    if (count > sizeof(data) / entry_size) {
+        return DNM_API_ERR;
+    }
+    for (size_t i = 0; i < count; i++) {
+        for (size_t b = 0; b < entry_size; b++) {
+            data[i * entry_size + b] = (value[i] >> (8 * b)) & 0xFF;
+        }
+    }
+
+    return dynamixel_sync_write_bytes(identifiers, count, entry, entry_size, data, bus);
 }
 
 dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t count, const uint16_t entry,
