@@ -6,6 +6,10 @@
 
 #include "dynamixel/crc.h"
 
+#define LL_OK 0
+#define LL_BUFFER_OVERFLOW (-1)
+#define LL_INVALID_MAGIC (-2)
+
 static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, size_t buffer_size);
 static uint8_t dynamixel_parse_response(const uint8_t *buffer, size_t len, uint8_t *status);
 static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, size_t len, uint8_t **parameters, size_t *length);
@@ -334,15 +338,15 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
     return DNM_OK; // This API call does not return a status result
 }
 
-static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, const size_t len) {
-    if (len == 0) {
+static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, const size_t buffer_size) {
+    if (buffer_size == 0) {
         return 0;
     }
 
     // Read the response header first, 7 bytes
     uint8_t *rxBufferPtr = buffer;
     size_t read_remaining = 7;
-    size_t buffer_remaining = len;
+    size_t buffer_remaining = buffer_size;
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
         if (n <= 0) {
@@ -353,18 +357,18 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         buffer_remaining -= n;
 
         if (read_remaining > buffer_remaining) {
-            return -1;
+            return LL_BUFFER_OVERFLOW;
         }
     }
 
     // Check Magic, include reserved bit to avoid stuffing problems
     if (!(buffer[0] == 0xFF && buffer[1] == 0xFF && buffer[2] == 0xFD && buffer[3] == 0x00)) {
-        return -1;
+        return LL_INVALID_MAGIC;
     }
 
     // Read the remainder of the packet
     read_remaining = (buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF);
-    buffer_remaining = len - 7;
+    buffer_remaining = buffer_size - 7;
     while (read_remaining) {
         const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
         if (n <= 0) {
@@ -376,7 +380,7 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         buffer_remaining -= n;
 
         if (read_remaining > buffer_remaining) {
-            return -1;
+            return LL_BUFFER_OVERFLOW;
         }
     }
 
