@@ -338,27 +338,36 @@ dynamixel_result_t dynamixel_sync_read(const uint8_t *identifiers, const size_t 
     return DNM_OK; // This API call does not return a status result
 }
 
+/**
+ * Read one status packet from the bus into buffer.
+ *
+ * The 7 byte header is read first, then the rest of the packet as announced by
+ * its length field. No read is ever larger than the space left in the buffer:
+ * a packet that does not fit is reported as LL_BUFFER_OVERFLOW before any of
+ * its payload is read.
+ *
+ * @return the packet length (> 0), 0 on a read timeout, LL_BUFFER_OVERFLOW or
+ *         LL_INVALID_MAGIC (< 0) for a packet that cannot be accepted, or the
+ *         negative value from the bus on a bus error
+ */
 static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buffer, const size_t buffer_size) {
     if (buffer_size == 0) {
         return 0;
     }
 
     // Read the response header first, 7 bytes
-    uint8_t *rxBufferPtr = buffer;
-    size_t read_remaining = 7;
-    size_t buffer_remaining = buffer_size;
-    while (read_remaining) {
-        const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+    const size_t header_size = 7;
+    if (buffer_size < header_size) {
+        return LL_BUFFER_OVERFLOW;
+    }
+
+    size_t received = 0;
+    while (received < header_size) {
+        const ssize_t n = dynamixel_bus_read(bus, buffer + received, header_size - received);
         if (n <= 0) {
             return n;
         }
-        read_remaining -= n;
-        rxBufferPtr += n;
-        buffer_remaining -= n;
-
-        if (read_remaining > buffer_remaining) {
-            return LL_BUFFER_OVERFLOW;
-        }
+        received += (size_t) n;
     }
 
     // Check Magic, include reserved bit to avoid stuffing problems
@@ -366,26 +375,22 @@ static ssize_t dynamixel_read_response(const dynamixel_bus_t *bus, uint8_t *buff
         return LL_INVALID_MAGIC;
     }
 
+    // The length field (little endian) counts everything after itself
+    const size_t packet_size = header_size + (size_t) (buffer[5] | (buffer[6] << 8));
+    if (packet_size > buffer_size) {
+        return LL_BUFFER_OVERFLOW;
+    }
+
     // Read the remainder of the packet
-    read_remaining = (buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF);
-    buffer_remaining = buffer_size - 7;
-    while (read_remaining) {
-        const ssize_t n = dynamixel_bus_read(bus, rxBufferPtr, read_remaining);
+    while (received < packet_size) {
+        const ssize_t n = dynamixel_bus_read(bus, buffer + received, packet_size - received);
         if (n <= 0) {
             return n;
         }
-
-        read_remaining -= n;
-        rxBufferPtr += n;
-        buffer_remaining -= n;
-
-        if (read_remaining > buffer_remaining) {
-            return LL_BUFFER_OVERFLOW;
-        }
+        received += (size_t) n;
     }
 
-    // return the actual length of the packet
-    return ((buffer[5] & 0xFF) | (buffer[6] >> 8 & 0xFF)) + 7;
+    return (ssize_t) packet_size;
 }
 
 static dynamixel_result_t dynamixel_parse_response(const uint8_t *buffer, const size_t len, uint8_t *status) {

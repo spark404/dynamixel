@@ -13,6 +13,7 @@ protected:
     uint8_t _readBuffer[1024]{0};
     ssize_t _readsize{0};
     ssize_t _writesize{0};
+    ssize_t _maxReadChunk{0};   // when > 0, a single read call returns at most this many bytes
 
     ApiTest() {
         _bus = {
@@ -58,6 +59,9 @@ protected:
         }
 
         ssize_t readsize = std::min(_readsize, size);
+        if (_maxReadChunk > 0) {
+            readsize = std::min(readsize, _maxReadChunk);
+        }
         memcpy(rxBuffer, _readBuffer, readsize);
 
         _readsize -= readsize;
@@ -166,6 +170,52 @@ TEST_F(ApiTest, ReadByte) {
     ASSERT_EQ(memcmp(_writeBuffer, expected_sent, _writesize), 0);
 
     ASSERT_EQ(value, 166);
+}
+
+TEST_F(ApiTest, ReadByteFragmented) {
+    // The response arrives in small pieces, as it does from a DMA ring
+    const uint8_t response[] = {
+        0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x05, 0x00, 0x55,
+        0x00, 0xA6, 0x87, 0x22
+    };
+    prepare_response(response, sizeof(response));
+    _maxReadChunk = 3;
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_OK);
+    ASSERT_EQ(value, 166);
+    ASSERT_EQ(_readsize, 0);
+}
+
+TEST_F(ApiTest, ReadResponseLengthExceedsBuffer) {
+    // Valid magic, but the length field claims 255 bytes after the header, more
+    // than the 121 bytes left in the 128 byte response buffer. The reader must
+    // give up without reading any of them (they would overflow the buffer).
+    uint8_t response[7 + 300] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0xFF, 0x00};
+    memset(response + 7, 0x5A, 300);
+    prepare_response(response, sizeof(response));
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_LL_ERR);
+    ASSERT_EQ(_readsize, 300) << "Payload bytes were read although they do not fit the buffer";
+}
+
+TEST_F(ApiTest, ReadResponseLengthHighByte) {
+    // Length 0x0102 = 258: the high byte must count. It used to be dropped, so
+    // the reader took the packet for a 2 byte one.
+    uint8_t response[7 + 300] = {0xFF, 0xFF, 0xFD, 0x00, 0x01, 0x02, 0x01};
+    memset(response + 7, 0x5A, 300);
+    prepare_response(response, sizeof(response));
+    uint32_t value;
+
+    dynamixel_result_t result = dynamixel_read(0x01, 132, 1, &value, &_bus);
+
+    ASSERT_EQ(result, DNM_LL_ERR);
+    ASSERT_EQ(_readsize, 300);
 }
 
 TEST_F(ApiTest, ReadWord) {
