@@ -295,8 +295,10 @@ dynamixel_result_t dynamixel_sync_read_bytes(const uint8_t *identifiers, const s
         return DNM_API_ERR;
     }
 
-    // The request is 14 + count bytes, a reply 11 + entry_size bytes
-    if (count > DYNAMIXEL_MAX_PACKET_SIZE - 14 || entry_size > DYNAMIXEL_MAX_PACKET_SIZE - 11) {
+    // The request is 14 + count bytes, a reply 11 + entry_size bytes plus the bytes the
+    // servo may stuff in it (at most one for every three data bytes)
+    if (count > DYNAMIXEL_MAX_PACKET_SIZE - 14 ||
+        (size_t) entry_size + entry_size / 3 > DYNAMIXEL_MAX_PACKET_SIZE - 11) {
         set_status_range(status, 0, count, DNM_API_ERR);
         return DNM_API_ERR;
     }
@@ -360,8 +362,8 @@ dynamixel_result_t dynamixel_sync_read_bytes(const uint8_t *identifiers, const s
             if ((servo_status & ~STATUS_ALERT_FLAG) != 0) {
                 // The servo reports an error and sends no data
                 outcome = servo_status;
-            } else if (dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length) != DNM_OK) {
-                outcome = DNM_API_ERR;
+            } else if ((outcome = dynamixel_parse_parameters(buffer, n, &parameters, &parameter_length)) != DNM_OK) {
+                // not a usable parameter block: outcome holds the reason
             } else if (parameter_length != entry_size) {
                 outcome = DNM_RECV_LENGTH_MISMATCH;
             } else {
@@ -509,7 +511,11 @@ static dynamixel_result_t dynamixel_parse_parameters(uint8_t *buffer, const size
         return DNM_API_ERR;
     }
 
+    // The servo stuffs 0xFF 0xFF 0xFD in the parameters (an extra 0xFD follows). The CRC was
+    // checked on the stuffed packet, so the parameters can now be restored in place.
     *parameters = &buffer[9];
-    *length = len - 9 - 2;
+    if (dynamixel_unstuff(*parameters, len - 11, length) != DYNAMIXEL_ERROR_NONE) {
+        return DNM_RECV_LENGTH_MISMATCH;
+    }
     return DNM_OK;
 }

@@ -134,7 +134,7 @@ The library uses fixed-size stack buffers internally. Practical caller-visible l
 
 - `DYNAMIXEL_MAX_PACKET_SIZE` (256 bytes, `priv_include/dynamixel/api.h`, overridable at compile time) is the size of the packet buffers on the caller's stack, two per sync call.
 - `dynamixel_sync_write_bytes` needs `14 + count * (length + 1)` bytes, so 18 servos can take up to 12 bytes each (a 248 byte packet).
-- `dynamixel_sync_read_bytes` needs `14 + count` bytes for the request and `11 + length` bytes per reply.
+- `dynamixel_sync_read_bytes` needs `14 + count` bytes for the request and `11 + length` bytes per reply, plus up to `length / 3` bytes of stuffing (so `length` is at most 184).
 - A request that does not fit is rejected with `DNM_API_ERR` before anything is sent.
 - The multi-servo wrappers (`dynamixel_*_multiple`) further cap the list at 64 servos.
 
@@ -159,7 +159,7 @@ A successful round-trip can also return a Dynamixel servo status byte directly (
 ## Limitations and gotchas worth knowing
 
 - **No retry logic.** Any single dropped byte aborts the call with `DNM_LL_TIMEOUT` or `DNM_LL_ERR`. If you need retries, wrap at the application level.
-- **No byte stuffing.** Protocol 2.0 inserts an extra `0xFD` after any `FF FF FD` in the data of a packet. The library neither adds nor removes it. Goal positions and profile values cannot contain that sequence, but a read of signed registers (load, velocity) could in rare combinations; the reply then fails with `DNM_RECV_LENGTH_MISMATCH` or `DNM_RECV_CRC_FAIL`.
+- **Byte stuffing is handled, and costs buffer space.** Protocol 2.0 inserts an extra `0xFD` after any `FF FF FD` in the parameters of a packet. The library adds it to the packets it sends and removes it from the replies it receives (the CRC is checked on the stuffed bytes first), so callers always see the real data. A reply can be up to one byte per three data bytes longer, and the buffer limits below include that; a request whose stuffed form does not fit returns `DNM_API_ERR`. A stuffing sequence that is not followed by its `0xFD` in a reply returns `DNM_RECV_LENGTH_MISMATCH`.
 - **Sequential `sync_read`.** The library issues one SYNC_READ packet but reads each servo's response in turn, so the latency is roughly *N × (servo delay + on-wire time)*. For high-rate multi-servo control this matters.
 - **No bulk read/write.** The Protocol 2.0 BULK opcodes are defined in `priv_include/dynamixel/protocol.h` but not exposed.
 - **XL430 only.** Other Dynamixel models compile but are rejected at runtime.

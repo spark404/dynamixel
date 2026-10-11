@@ -34,6 +34,8 @@ dynamixel_result_t dynamixel_read(uint8_t identifier, uint16_t entry, uint8_t en
  *
  * The packet takes 14 + count * (entry_size + 1) bytes, which must not exceed
  * DYNAMIXEL_MAX_PACKET_SIZE. Returns DNM_API_ERR for a request that does not fit.
+ * Data containing 0xFF 0xFF 0xFD is byte stuffed on the wire (one extra byte
+ * each), which counts towards that size.
  */
 dynamixel_result_t dynamixel_sync_write_bytes(const uint8_t *identifiers, size_t count, uint16_t entry,
                                               uint16_t entry_size, const uint8_t *data, const dynamixel_bus_t *bus);

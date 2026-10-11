@@ -70,7 +70,32 @@ typedef uint8_t dynamixel_error_t;
 extern "C" {
 #endif
 
+/**
+ * Build an instruction packet: header, parameters and CRC.
+ *
+ * header.length must be param_length + 3 (instruction, CRC). The parameters are
+ * byte stuffed as the protocol requires: an extra 0xFD is inserted after every
+ * 0xFF 0xFF 0xFD in them, and the length in the packet (and the CRC) cover the
+ * stuffed form. buffer_length must hold the stuffed packet, see
+ * dynamixel_stuffed_length(); otherwise DYNAMIXEL_ERROR_BUFFER_TOO_SMALL.
+ */
 dynamixel_error_t dynamixel_build_packet(dynamixel_packet_header_t header, uint8_t *param, size_t param_length, uint8_t *buffer, size_t buffer_length, size_t *length);
+
+/**
+ * Number of bytes param takes once stuffed: param_length plus one for every
+ * 0xFF 0xFF 0xFD in it. Never more than param_length + param_length / 3.
+ */
+size_t dynamixel_stuffed_length(const uint8_t *param, size_t param_length);
+
+/**
+ * Remove the stuffing from the parameters of a received packet, in place.
+ * Every 0xFF 0xFF 0xFD must be followed by the stuffed 0xFD, which is dropped.
+ * On success *unstuffed_length is the length of the real parameters. A sequence
+ * that is not followed by 0xFD, or a stuffed byte missing at the end, returns
+ * DYNAMIXEL_ERROR_INVALID_PACKET and leaves the data in an undefined state.
+ * The CRC of a received packet covers the stuffed form, check it first.
+ */
+dynamixel_error_t dynamixel_unstuff(uint8_t *data, size_t length, size_t *unstuffed_length);
 
 #ifdef __cplusplus
 }
